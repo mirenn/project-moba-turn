@@ -102,6 +102,14 @@ export interface PlayerState {
   champions: ChampionInstance[]; // ゲーム内のチャンピオンインスタンス
 }
 
+// 解決待ちの行動
+export interface PendingAction {
+  action: CardAction | GuardAction;
+  team: Team;
+  priority: number;
+  championId: string;
+}
+
 export interface GameState {
   players: Record<Team, PlayerState>;
   towers: Tower[];
@@ -109,8 +117,13 @@ export interface GameState {
   turnInPhase: number;     // フェイズ内のターン数（1-4）
   turnActions: Record<Team, TurnAction>;
   turnLog: string[];
-  gamePhase: 'deploy' | 'action' | 'resolution'; // ゲームフェーズ
+  gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ
   winner: Team | null;
+  
+  // 解決フェーズ用
+  pendingActions: PendingAction[];  // 解決待ち行動キュー（優先度順）
+  currentResolvingAction: PendingAction | null; // 現在解決中の行動
+  awaitingTargetSelection: boolean; // プレイヤーのターゲット選択待ちかどうか
 }
 
 // 旧型との互換性のため（移行期間中）

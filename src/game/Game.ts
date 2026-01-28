@@ -9,7 +9,8 @@ import {
   CardAction,
   GuardAction,
   TurnAction,
-  Card
+  Card,
+  PendingAction
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
@@ -20,7 +21,6 @@ const KNOCKOUT_TURNS = 4;
 const BENCH_RECOVERY_PERCENT = 0.15;
 const GUARD_DAMAGE_REDUCTION = 1 / 3;
 const CHAMPIONS_ON_FIELD = 3;
-const CHAMPIONS_PER_TEAM = 4;
 
 function createTower(id: string, team: Team, x: number, y: number): Tower {
   return {
@@ -36,9 +36,6 @@ function getDistance(p1: Position, p2: Position): number {
   return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
 }
 
-/**
- * チャンピオン定義からゲーム内インスタンスを生成
- */
 function createChampionInstance(
   definitionId: string, 
   team: Team, 
@@ -56,19 +53,15 @@ function createChampionInstance(
     maxHp: definition.hp,
     currentType: definition.type,
     pos: initialPos,
-    hand: [...definition.cards], // カードをコピー
+    hand: [...definition.cards],
     usedCards: [],
     isGuarding: false,
     knockoutTurnsRemaining: 0,
   };
 }
 
-/**
- * チームのスポーン位置を取得
- */
 function getSpawnPositions(team: Team): Position[] {
   if (team === '0') {
-    // 左下エリア
     return [
       { x: 0, y: 6 },
       { x: 0, y: 7 },
@@ -77,7 +70,6 @@ function getSpawnPositions(team: Team): Position[] {
       { x: 1, y: 8 },
     ];
   } else {
-    // 右上エリア
     return [
       { x: 8, y: 0 },
       { x: 8, y: 1 },
@@ -88,17 +80,11 @@ function getSpawnPositions(team: Team): Position[] {
   }
 }
 
-/**
- * 初期配置位置を取得
- */
 function getInitialPositions(team: Team): Position[] {
   const spawns = getSpawnPositions(team);
   return spawns.slice(0, CHAMPIONS_ON_FIELD);
 }
 
-/**
- * プレイヤー状態を初期化
- */
 function initializePlayerState(team: Team, championIds: string[]): PlayerState {
   const initialPositions = getInitialPositions(team);
   
@@ -120,19 +106,14 @@ export const LoLBoardGame = {
   setup: (): GameState => {
     const towers: Tower[] = [];
 
-    // チーム0のタワー配置 (左下エリアを守る)
     towers.push(createTower('tower-0-1', '0', 0, 4));
     towers.push(createTower('tower-0-2', '0', 2, 6));
     towers.push(createTower('tower-0-3', '0', 4, 8));
 
-    // チーム1のタワー配置 (右上エリアを守る)
     towers.push(createTower('tower-1-1', '1', 8, 4));
     towers.push(createTower('tower-1-2', '1', 6, 2));
     towers.push(createTower('tower-1-3', '1', 4, 0));
 
-    // 各プレイヤーに4体のチャンピオンを割り当て（バンピック未実装のため固定）
-    // チーム0: ゲコゲコガ、炎獅子、雷鳥、機動馬
-    // チーム1: 機動馬、雷鳥、炎獅子、ゲコゲコガ
     const team0Champions = ['gekogekoga', 'enshishi', 'raichou', 'kidouba'];
     const team1Champions = ['kidouba', 'raichou', 'enshishi', 'gekogekoga'];
 
@@ -150,85 +131,64 @@ export const LoLBoardGame = {
         '0': { actions: [] }, 
         '1': { actions: [] } 
       },
-      turnLog: ['ゲーム開始 - 9×9ボード'],
-      gamePhase: 'action',
+      turnLog: ['ゲーム開始 - 9×9ボード', '【ルール】カード選択後、解決フェーズでターゲットを選びます'],
+      gamePhase: 'planning',
       winner: null,
+      pendingActions: [],
+      currentResolvingAction: null,
+      awaitingTargetSelection: false,
     };
   },
 
   moves: {
-    /**
-     * カードをプレイする
-     */
-    playCard: (
+    // 計画フェーズ: カードを選択
+    selectCard: (
       { G, playerID }: { G: GameState; playerID: string },
       championId: string,
-      cardId: string,
-      targetPos?: Position,
-      targetChampionId?: string
+      cardId: string
     ) => {
-      const team = playerID as Team;
-      const playerState = G.players[team];
+      if (G.gamePhase !== 'planning') return;
       
-      // チャンピオンの存在確認
-      const champion = playerState.champions.find(c => c.id === championId);
-      if (!champion || champion.pos === null) {
-        console.warn(`Champion ${championId} not found or not on field`);
-        return;
-      }
-      
-      // カードの存在確認
-      const card = champion.hand.find(c => c.id === cardId);
-      if (!card) {
-        console.warn(`Card ${cardId} not in hand`);
-        return;
-      }
-      
-      // 既に2体分の行動を選択済みかチェック
-      const currentActions = G.turnActions[team].actions;
-      if (currentActions.length >= 2) {
-        console.warn('Already selected 2 actions this turn');
-        return;
-      }
-      
-      // 同じチャンピオンが既に行動選択済みかチェック
-      const alreadyActing = currentActions.some(a => a.championId === championId);
-      if (alreadyActing) {
-        console.warn(`Champion ${championId} already has an action this turn`);
-        return;
-      }
-      
-      const action: CardAction = {
-        championId,
-        cardId,
-        targetPos,
-        targetChampionId,
-      };
-      
-      G.turnActions[team].actions.push(action);
-    },
-    
-    /**
-     * ガードアクションを選択
-     */
-    guard: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string,
-      discardCardIds: [string, string]
-    ) => {
       const team = playerID as Team;
       const playerState = G.players[team];
       
       const champion = playerState.champions.find(c => c.id === championId);
       if (!champion || champion.pos === null) return;
       
-      // 2枚のカードを持っているか確認
+      const card = champion.hand.find(c => c.id === cardId);
+      if (!card) return;
+      
+      const currentActions = G.turnActions[team].actions;
+      if (currentActions.length >= 2) return;
+      
+      const alreadyActing = currentActions.some(a => a.championId === championId);
+      if (alreadyActing) return;
+      
+      const action: CardAction = {
+        championId,
+        cardId,
+      };
+      
+      G.turnActions[team].actions.push(action);
+    },
+    
+    // 計画フェーズ: ガード選択
+    guard: (
+      { G, playerID }: { G: GameState; playerID: string },
+      championId: string,
+      discardCardIds: [string, string]
+    ) => {
+      if (G.gamePhase !== 'planning') return;
+      
+      const team = playerID as Team;
+      const playerState = G.players[team];
+      
+      const champion = playerState.champions.find(c => c.id === championId);
+      if (!champion || champion.pos === null) return;
+      
       const card1 = champion.hand.find(c => c.id === discardCardIds[0]);
       const card2 = champion.hand.find(c => c.id === discardCardIds[1]);
-      if (!card1 || !card2) {
-        console.warn('Need 2 cards to guard');
-        return;
-      }
+      if (!card1 || !card2) return;
       
       const currentActions = G.turnActions[team].actions;
       if (currentActions.length >= 2) return;
@@ -244,86 +204,144 @@ export const LoLBoardGame = {
       G.turnActions[team].actions.push(action);
     },
     
-    /**
-     * 行動選択をキャンセル
-     */
+    // 行動キャンセル
     cancelAction: (
       { G, playerID }: { G: GameState; playerID: string },
       championId: string
     ) => {
+      if (G.gamePhase !== 'planning') return;
       const team = playerID as Team;
       G.turnActions[team].actions = G.turnActions[team].actions.filter(
         a => a.championId !== championId
       );
     },
     
-    /**
-     * 出撃フェーズでチャンピオンを配置
-     */
-    deployChampion: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string,
-      pos: Position
+    // 計画確定 → 解決フェーズへ
+    confirmPlan: ({ G, random }: { G: GameState; random: any }) => {
+      if (G.gamePhase !== 'planning') return;
+      if (G.turnActions['0'].actions.length < 2) return;
+      
+      // CPUの行動を自動選択
+      autoSelectCPUActions(G, '1', random);
+      
+      // 全行動を優先度順にソート
+      const allActions: PendingAction[] = [];
+      
+      for (const team of ['0', '1'] as Team[]) {
+        for (const action of G.turnActions[team].actions) {
+          const champion = G.players[team].champions.find(c => c.id === action.championId);
+          if (!champion) continue;
+          
+          let priority = 0;
+          if (!('discardCardIds' in action)) {
+            const card = champion.hand.find(c => c.id === action.cardId);
+            priority = card?.priority || 0;
+          }
+          
+          allActions.push({
+            action,
+            team,
+            priority,
+            championId: action.championId,
+          });
+        }
+      }
+      
+      // 優先度の高い順にソート
+      allActions.sort((a, b) => b.priority - a.priority);
+      
+      G.pendingActions = allActions;
+      G.gamePhase = 'resolution';
+      G.turnLog.push('--- 解決フェーズ開始 ---');
+      
+      // 最初の行動を設定
+      processNextAction(G, random);
+    },
+    
+    // 解決フェーズ: ターゲットを選択して実行
+    selectTarget: (
+      { G, random }: { G: GameState; random: any },
+      targetPos?: Position,
+      targetChampionId?: string
     ) => {
-      if (G.gamePhase !== 'deploy') return;
+      if (G.gamePhase !== 'resolution') return;
+      if (!G.currentResolvingAction) return;
+      if (!G.awaitingTargetSelection) return;
       
-      const team = playerID as Team;
-      const playerState = G.players[team];
+      const { action, team } = G.currentResolvingAction;
       
-      const champion = playerState.champions.find(c => c.id === championId);
-      if (!champion || champion.pos !== null) return;
-      if (champion.knockoutTurnsRemaining > 0) return;
+      // ガードの場合はターゲット不要
+      if ('discardCardIds' in action) {
+        resolveGuardAction(G, action, team);
+      } else {
+        // カードアクションを実行
+        action.targetPos = targetPos;
+        action.targetChampionId = targetChampionId;
+        resolveCardAction(G, action, team, random);
+      }
       
-      // 有効なスポーン位置か確認
-      const spawnPositions = getSpawnPositions(team);
-      const isValidSpawn = spawnPositions.some(sp => sp.x === pos.x && sp.y === pos.y);
-      if (!isValidSpawn) return;
+      G.awaitingTargetSelection = false;
+      G.currentResolvingAction = null;
       
-      // 他のユニットと重なっていないか
-      const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-      const isOccupied = allChampions.some(c => c.pos?.x === pos.x && c.pos?.y === pos.y);
-      if (isOccupied) return;
+      // 次の行動へ
+      processNextAction(G, random);
+    },
+    
+    // 解決フェーズ: スキップ（移動・攻撃しない）
+    skipAction: ({ G, random }: { G: GameState; random: any }) => {
+      if (G.gamePhase !== 'resolution') return;
+      if (!G.currentResolvingAction) return;
       
-      champion.pos = pos;
+      const { action, team } = G.currentResolvingAction;
+      const champion = G.players[team].champions.find(c => c.id === action.championId);
+      
+      if (champion && !('discardCardIds' in action)) {
+        const card = champion.hand.find(c => c.id === action.cardId);
+        if (card) {
+          G.turnLog.push(`${getChampionDisplayName(champion)} は ${card.nameJa} の使用をスキップした`);
+          // カードは消費される
+          champion.hand = champion.hand.filter(c => c.id !== card.id);
+          champion.usedCards.push(card);
+        }
+      }
+      
+      G.awaitingTargetSelection = false;
+      G.currentResolvingAction = null;
+      processNextAction(G, random);
     },
   },
 
   turn: {
     activePlayers: ActivePlayers.ALL,
     onBegin: ({ G }: { G: GameState }) => {
-      // ターン開始時の初期化
       G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
+      G.gamePhase = 'planning';
+      G.pendingActions = [];
+      G.currentResolvingAction = null;
+      G.awaitingTargetSelection = false;
       
-      // ガード状態をリセット
       for (const team of ['0', '1'] as Team[]) {
         for (const champion of G.players[team].champions) {
           champion.isGuarding = false;
         }
       }
     },
-    onEnd: ({ G, ctx, random }: { G: GameState; ctx: any; random: any }) => {
-      resolveActions(G, ctx, random);
-    },
   },
   
   endIf: ({ G }: { G: GameState }) => {
-    // タワー全滅チェック
     const team0Towers = G.towers.filter(t => t.team === '0').length;
     const team1Towers = G.towers.filter(t => t.team === '1').length;
     
     if (team0Towers === 0) return { winner: '1' };
     if (team1Towers === 0) return { winner: '0' };
     
-    // 本拠地到達チェック
     const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
     
-    // チーム0が右上エリア（チーム1の本拠地）に到達
     const team0ReachedBase = allChampions.some(c => 
       c.team === '0' && c.pos && c.pos.x === 8 && c.pos.y === 0
     );
     if (team0ReachedBase) return { winner: '0' };
     
-    // チーム1が左下エリア（チーム0の本拠地）に到達
     const team1ReachedBase = allChampions.some(c =>
       c.team === '1' && c.pos && c.pos.x === 0 && c.pos.y === 8
     );
@@ -334,86 +352,69 @@ export const LoLBoardGame = {
 };
 
 /**
- * 行動解決処理
+ * 次の行動を処理
  */
-function resolveActions(G: GameState, ctx: any, random: any) {
-  const logs: string[] = [];
-  logs.push(`--- フェイズ${G.currentPhase} ターン${G.turnInPhase} ---`);
-  
-  // すべての行動を収集して優先度順にソート
-  const allActions: { action: CardAction | GuardAction; team: Team; priority: number }[] = [];
-  
-  for (const team of ['0', '1'] as Team[]) {
-    for (const action of G.turnActions[team].actions) {
-      // GuardActionかCardActionかを判定
-      if ('discardCardIds' in action) {
-        // ガードは優先度0（最後に処理）
-        allActions.push({ action, team, priority: 0 });
-      } else {
-        // カードアクションは優先度を取得
-        const champion = G.players[team].champions.find(c => c.id === action.championId);
-        const card = champion?.hand.find(c => c.id === action.cardId);
-        if (card) {
-          allActions.push({ action, team, priority: card.priority });
-        }
-      }
-    }
+function processNextAction(G: GameState, random: any) {
+  // 全行動終了チェック
+  if (G.pendingActions.length === 0) {
+    finishResolutionPhase(G, random);
+    return;
   }
   
-  // 優先度の高い順にソート
-  allActions.sort((a, b) => b.priority - a.priority);
+  // 次の行動を取得
+  const nextAction = G.pendingActions.shift()!;
+  G.currentResolvingAction = nextAction;
   
-  // 行動を順番に解決
-  for (const { action, team } of allActions) {
-    const playerState = G.players[team];
-    
-    if ('discardCardIds' in action) {
-      // ガードアクション
-      const champion = playerState.champions.find(c => c.id === action.championId);
-      if (champion && champion.pos) {
-        champion.isGuarding = true;
-        // カードを捨てる
-        champion.hand = champion.hand.filter(c => 
-          c.id !== action.discardCardIds[0] && c.id !== action.discardCardIds[1]
-        );
-        const cardNames = action.discardCardIds.join(', ');
-        logs.push(`${getChampionDisplayName(champion)} がガード状態になった`);
-      }
-    } else {
-      // カードアクション
-      resolveCardAction(G, action, team, logs, random);
-    }
+  const { action, team } = nextAction;
+  const champion = G.players[team].champions.find(c => c.id === action.championId);
+  
+  if (!champion || !champion.pos) {
+    // チャンピオンが倒されている場合、スキップ
+    processNextAction(G, random);
+    return;
   }
   
-  // タワーの攻撃（範囲内の敵を攻撃）
-  resolveTowerAttacks(G, logs);
-  
-  // 撃破チェック
-  checkKnockouts(G, logs);
-  
-  // ベンチ回復
-  processBenchRecovery(G, logs);
-  
-  // 撃破カウントダウン
-  processKnockoutCountdown(G);
-  
-  // ターン/フェイズ進行
-  G.turnInPhase++;
-  if (G.turnInPhase > TURNS_PER_PHASE) {
-    G.turnInPhase = 1;
-    G.currentPhase++;
-    
-    // フェイズ終了時: カード補充
-    refillCards(G, logs);
-    
-    // 出撃フェーズに移行
-    G.gamePhase = 'deploy';
-    logs.push(`=== フェイズ${G.currentPhase}開始 - 出撃フェーズ ===`);
+  // ガードアクションは即時実行
+  if ('discardCardIds' in action) {
+    resolveGuardAction(G, action, team);
+    G.currentResolvingAction = null;
+    processNextAction(G, random);
+    return;
   }
   
-  // 行動をクリア
-  G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
-  G.turnLog = [...G.turnLog, ...logs];
+  // プレイヤーの行動: ターゲット選択待ち
+  if (team === '0') {
+    G.awaitingTargetSelection = true;
+    const card = champion.hand.find(c => c.id === action.cardId);
+    G.turnLog.push(`[あなたの番] ${getChampionDisplayName(champion)} の ${card?.nameJa || 'カード'} - ターゲットを選択してください`);
+    return;
+  }
+  
+  // CPUの行動: 自動ターゲット選択
+  const card = champion.hand.find(c => c.id === action.cardId);
+  if (card) {
+    const { targetPos, targetChampionId } = autoSelectTarget(G, champion, card, team);
+    action.targetPos = targetPos;
+    action.targetChampionId = targetChampionId;
+    resolveCardAction(G, action, team, random);
+  }
+  
+  G.currentResolvingAction = null;
+  processNextAction(G, random);
+}
+
+/**
+ * ガードアクションの解決
+ */
+function resolveGuardAction(G: GameState, action: GuardAction, team: Team) {
+  const champion = G.players[team].champions.find(c => c.id === action.championId);
+  if (!champion || !champion.pos) return;
+  
+  champion.isGuarding = true;
+  champion.hand = champion.hand.filter(c => 
+    c.id !== action.discardCardIds[0] && c.id !== action.discardCardIds[1]
+  );
+  G.turnLog.push(`${getChampionDisplayName(champion)} がガード状態になった`);
 }
 
 /**
@@ -422,8 +423,7 @@ function resolveActions(G: GameState, ctx: any, random: any) {
 function resolveCardAction(
   G: GameState, 
   action: CardAction, 
-  team: Team, 
-  logs: string[],
+  team: Team,
   random: any
 ) {
   const champion = G.players[team].champions.find(c => c.id === action.championId);
@@ -435,17 +435,18 @@ function resolveCardAction(
   const championDef = getChampionById(champion.definitionId);
   const championName = getChampionDisplayName(champion);
   
-  // へんげんじざい特性の処理
+  // へんげんじざい特性
   if (championDef?.ability === 'protean' && card.type !== 'normal') {
     champion.currentType = card.type;
-    logs.push(`${championName} は ${getTypeNameJa(card.type)} タイプに変化した！`);
+    G.turnLog.push(`${championName} は ${getTypeNameJa(card.type)} タイプに変化した！`);
   }
+  
+  const enemyTeam = team === '0' ? '1' : '0';
   
   // 移動処理
   if (card.move > 0 && action.targetPos) {
     const dist = getDistance(champion.pos, action.targetPos);
     if (dist <= card.move) {
-      // 衝突チェック
       const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
       const isOccupied = allChampions.some(c => 
         c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
@@ -456,22 +457,20 @@ function resolveCardAction(
       
       if (!isOccupied && !isTowerPos) {
         champion.pos = action.targetPos;
-        logs.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
+        G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
       }
     }
   }
   
   // 攻撃処理
   if (card.power > 0 && action.targetChampionId) {
-    const enemyTeam = team === '0' ? '1' : '0';
     const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
     
     if (target && target.pos) {
       const dist = getDistance(champion.pos, target.pos);
-      const attackRange = card.move > 0 ? 1 : 2; // 移動技は隣接、それ以外は2マス
+      const attackRange = card.move > 0 ? 1 : 2;
       
       if (dist <= attackRange) {
-        // ダメージ計算
         const { damage, effectiveness } = calculateDamage(
           card.power,
           card.type,
@@ -479,38 +478,27 @@ function resolveCardAction(
           target.currentType
         );
         
-        // ガード補正
         let finalDamage = damage;
         if (target.isGuarding) {
           finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
-          logs.push(`${getChampionDisplayName(target)} はガードしている！`);
+          G.turnLog.push(`${getChampionDisplayName(target)} はガードしている！`);
         }
         
-        // 特殊効果: みずしゅりけん（2-4回攻撃）
+        // みずしゅりけん
         if (card.effectFn === 'multiHit') {
-          const hits = 2 + Math.floor(random.Number() * 3); // 2-4回
+          const hits = 2 + Math.floor(random.Number() * 3);
           finalDamage = finalDamage * hits;
-          logs.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
+          G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
         }
         
         target.currentHp -= finalDamage;
         
         let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
         if (effectiveness) logMsg += ` ${effectiveness}`;
-        logs.push(logMsg);
+        G.turnLog.push(logMsg);
         
-        // 特殊効果: ひるみ（flinch）
-        if (card.effectFn === 'flinch') {
-          const flinchChance = card.nameJa === 'あくのはどう' ? 0.2 : 0.3;
-          if (random.Number() < flinchChance) {
-            // このターンの相手の行動を無効化（簡易実装）
-            logs.push(`${getChampionDisplayName(target)} はひるんだ！`);
-          }
-        }
-        
-        // 特殊効果: ノックバック
-        if (card.effectFn === 'knockback' && random.Number() < 0.3) {
-          // 押し出し方向を計算
+        // ノックバック
+        if (card.effectFn === 'knockback' && random.Number() < 0.3 && target.pos) {
           const dx = target.pos.x - champion.pos.x;
           const dy = target.pos.y - champion.pos.y;
           const newX = target.pos.x + (dx !== 0 ? Math.sign(dx) : 0);
@@ -518,44 +506,182 @@ function resolveCardAction(
           
           if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE) {
             target.pos = { x: newX, y: newY };
-            logs.push(`${getChampionDisplayName(target)} は押し出された！`);
+            G.turnLog.push(`${getChampionDisplayName(target)} は押し出された！`);
           }
         }
         
-        // 特殊効果: 反動ダメージ
+        // 反動
         if (card.effectFn === 'recoil') {
           const recoilDamage = Math.floor(finalDamage / 3);
           champion.currentHp -= recoilDamage;
-          logs.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
+          G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
         }
+        
+        // 撃破チェック
+        if (target.currentHp <= 0) {
+          target.pos = null;
+          target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
+          target.currentHp = 0;
+          G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！`);
+        }
+      } else {
+        G.turnLog.push(`${championName} の ${card.nameJa}！ しかし届かなかった...`);
       }
     }
   }
   
   // 交代処理
   if (card.isSwap || card.effectFn === 'uturn') {
-    // 控えのチャンピオンを探す
     const benchChampion = G.players[team].champions.find(c => 
       c.pos === null && c.knockoutTurnsRemaining === 0
     );
     
     if (benchChampion) {
-      // 位置を交換
       benchChampion.pos = { ...champion.pos };
       champion.pos = null;
-      logs.push(`${championName} と ${getChampionDisplayName(benchChampion)} が交代した！`);
+      G.turnLog.push(`${championName} と ${getChampionDisplayName(benchChampion)} が交代した！`);
     }
   }
   
-  // カードを使用済みに
+  // カードを消費
   champion.hand = champion.hand.filter(c => c.id !== card.id);
   champion.usedCards.push(card);
 }
 
 /**
- * タワー攻撃の解決
+ * CPUのターゲット自動選択
  */
-function resolveTowerAttacks(G: GameState, logs: string[]) {
+function autoSelectTarget(
+  G: GameState,
+  champion: ChampionInstance,
+  card: Card,
+  team: Team
+): { targetPos?: Position; targetChampionId?: string } {
+  const enemyTeam = team === '0' ? '1' : '0';
+  const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
+  
+  // 最も近い敵を見つける
+  let closestEnemy: ChampionInstance | null = null;
+  let closestDist = Infinity;
+  
+  if (champion.pos) {
+    for (const enemy of enemies) {
+      if (!enemy.pos) continue;
+      const dist = getDistance(champion.pos, enemy.pos);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestEnemy = enemy;
+      }
+    }
+  }
+  
+  let targetPos: Position | undefined;
+  let targetChampionId: string | undefined;
+  
+  // 移動先を決定
+  if (card.move > 0 && champion.pos) {
+    if (closestEnemy?.pos) {
+      targetPos = getMoveTowardsTarget(champion.pos, closestEnemy.pos, card.move, G, champion.id);
+    } else {
+      const enemyBase = team === '0' ? { x: 8, y: 0 } : { x: 0, y: 8 };
+      targetPos = getMoveTowardsTarget(champion.pos, enemyBase, card.move, G, champion.id);
+    }
+  }
+  
+  // 攻撃対象を決定
+  if (card.power > 0 && closestEnemy) {
+    targetChampionId = closestEnemy.id;
+  }
+  
+  return { targetPos, targetChampionId };
+}
+
+/**
+ * 目標に向かって移動する位置を計算
+ */
+function getMoveTowardsTarget(
+  from: Position, 
+  to: Position, 
+  maxMove: number,
+  G: GameState,
+  selfId: string
+): Position {
+  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+  
+  let bestPos = from;
+  let bestDist = getDistance(from, to);
+  
+  for (let mx = -maxMove; mx <= maxMove; mx++) {
+    for (let my = -maxMove; my <= maxMove; my++) {
+      if (Math.abs(mx) + Math.abs(my) > maxMove) continue;
+      if (mx === 0 && my === 0) continue;
+      
+      const newX = from.x + mx;
+      const newY = from.y + my;
+      
+      if (newX < 0 || newX >= BOARD_SIZE || newY < 0 || newY >= BOARD_SIZE) continue;
+      
+      const isOccupied = allChampions.some(c => 
+        c.id !== selfId && c.pos?.x === newX && c.pos?.y === newY
+      );
+      const isTowerPos = G.towers.some(t => t.pos.x === newX && t.pos.y === newY);
+      
+      if (isOccupied || isTowerPos) continue;
+      
+      const distToTarget = getDistance({ x: newX, y: newY }, to);
+      if (distToTarget < bestDist) {
+        bestDist = distToTarget;
+        bestPos = { x: newX, y: newY };
+      }
+    }
+  }
+  
+  return bestPos;
+}
+
+/**
+ * 解決フェーズ終了
+ */
+function finishResolutionPhase(G: GameState, random: any) {
+  // タワー攻撃
+  resolveTowerAttacks(G);
+  
+  // 撃破チェック
+  checkKnockouts(G);
+  
+  // ベンチ回復
+  processBenchRecovery(G);
+  
+  // 撃破カウントダウン
+  processKnockoutCountdown(G);
+  
+  // ターン/フェイズ進行
+  G.turnInPhase++;
+  if (G.turnInPhase > TURNS_PER_PHASE) {
+    G.turnInPhase = 1;
+    G.currentPhase++;
+    refillCards(G);
+    G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
+  }
+  
+  // 計画フェーズに戻る
+  G.gamePhase = 'planning';
+  G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
+  G.pendingActions = [];
+  G.currentResolvingAction = null;
+  G.awaitingTargetSelection = false;
+  
+  // ガード状態リセット
+  for (const team of ['0', '1'] as Team[]) {
+    for (const champion of G.players[team].champions) {
+      champion.isGuarding = false;
+    }
+  }
+  
+  G.turnLog.push('--- ターン終了 ---');
+}
+
+function resolveTowerAttacks(G: GameState) {
   const TOWER_ATTACK = 40;
   const TOWER_RANGE = 2;
   
@@ -581,59 +707,47 @@ function resolveTowerAttacks(G: GameState, logs: string[]) {
         damage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
       }
       target.currentHp -= damage;
-      logs.push(`タワー(${tower.id}) が ${getChampionDisplayName(target)} に ${damage} ダメージ`);
+      G.turnLog.push(`タワー(${tower.id}) が ${getChampionDisplayName(target)} に ${damage} ダメージ`);
     }
   }
 }
 
-/**
- * 撃破チェック
- */
-function checkKnockouts(G: GameState, logs: string[]) {
+function checkKnockouts(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
       if (champion.currentHp <= 0 && champion.pos !== null) {
         champion.pos = null;
         champion.knockoutTurnsRemaining = KNOCKOUT_TURNS;
         champion.currentHp = 0;
-        logs.push(`${getChampionDisplayName(champion)} は撃破された！ (${KNOCKOUT_TURNS}ターン後に復活可能)`);
+        G.turnLog.push(`${getChampionDisplayName(champion)} は撃破された！`);
       }
     }
   }
   
-  // タワー破壊
   const destroyedTowers = G.towers.filter(t => t.hp <= 0);
   for (const tower of destroyedTowers) {
-    logs.push(`タワー(${tower.id}) が破壊された！`);
+    G.turnLog.push(`タワー(${tower.id}) が破壊された！`);
   }
   G.towers = G.towers.filter(t => t.hp > 0);
 }
 
-/**
- * ベンチ回復処理
- */
-function processBenchRecovery(G: GameState, logs: string[]) {
+function processBenchRecovery(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
       if (champion.pos === null && champion.knockoutTurnsRemaining === 0 && champion.currentHp < champion.maxHp) {
         const recoveryAmount = Math.floor(champion.maxHp * BENCH_RECOVERY_PERCENT);
         champion.currentHp = Math.min(champion.currentHp + recoveryAmount, champion.maxHp);
-        logs.push(`${getChampionDisplayName(champion)} はベンチで ${recoveryAmount} HP回復した`);
       }
     }
   }
 }
 
-/**
- * 撃破カウントダウン
- */
 function processKnockoutCountdown(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
       if (champion.knockoutTurnsRemaining > 0) {
         champion.knockoutTurnsRemaining--;
         if (champion.knockoutTurnsRemaining === 0) {
-          // 復活可能に（HP全回復）
           champion.currentHp = champion.maxHp;
         }
       }
@@ -641,10 +755,7 @@ function processKnockoutCountdown(G: GameState) {
   }
 }
 
-/**
- * カード補充（フェイズ終了時）
- */
-function refillCards(G: GameState, logs: string[]) {
+function refillCards(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
       const definition = getChampionById(champion.definitionId);
@@ -654,21 +765,57 @@ function refillCards(G: GameState, logs: string[]) {
       }
     }
   }
-  logs.push('全チャンピオンのカードが補充された');
+  G.turnLog.push('全チャンピオンのカードが補充された');
 }
 
-/**
- * チャンピオンの表示名を取得
- */
+function autoSelectCPUActions(G: GameState, cpuTeam: Team, random: any) {
+  const playerState = G.players[cpuTeam];
+  const currentActions = G.turnActions[cpuTeam].actions;
+  
+  if (currentActions.length >= 2) return;
+  
+  const actingChampionIds = currentActions.map(a => a.championId);
+  const availableChampions = playerState.champions.filter(
+    c => c.pos !== null && !actingChampionIds.includes(c.id) && c.hand.length > 0
+  );
+  
+  const actionsNeeded = 2 - currentActions.length;
+  
+  for (let i = 0; i < actionsNeeded && i < availableChampions.length; i++) {
+    const champion = availableChampions[i];
+    
+    const attackCards = champion.hand.filter(c => c.power > 0 && !c.isSwap);
+    const moveCards = champion.hand.filter(c => c.move > 0 && !c.isSwap);
+    const otherCards = champion.hand.filter(c => !c.isSwap);
+    
+    let selectedCard;
+    
+    if (attackCards.length > 0 && random.Number() < 0.5) {
+      selectedCard = attackCards[Math.floor(random.Number() * attackCards.length)];
+    } else if (moveCards.length > 0 && random.Number() < 0.3) {
+      selectedCard = moveCards[Math.floor(random.Number() * moveCards.length)];
+    } else if (otherCards.length > 0) {
+      selectedCard = otherCards[Math.floor(random.Number() * otherCards.length)];
+    } else {
+      selectedCard = champion.hand[0];
+    }
+    
+    if (selectedCard) {
+      const action: CardAction = {
+        championId: champion.id,
+        cardId: selectedCard.id,
+      };
+      G.turnActions[cpuTeam].actions.push(action);
+    }
+  }
+}
+
 function getChampionDisplayName(champion: ChampionInstance): string {
   const def = getChampionById(champion.definitionId);
   const teamLabel = champion.team === '0' ? '青' : '赤';
   return `[${teamLabel}]${def?.nameJa || champion.definitionId}`;
 }
 
-/**
- * タイプ名の日本語化
- */
 function getTypeNameJa(type: string): string {
   const typeNames: Record<string, string> = {
     normal: 'ノーマル',
