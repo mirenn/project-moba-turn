@@ -22,11 +22,34 @@ const BENCH_RECOVERY_PERCENT = 0.15;
 const GUARD_DAMAGE_REDUCTION = 1 / 3;
 const CHAMPIONS_ON_FIELD = 3;
 
+// 勝利マス（ネクサス）の定義
+function getVictorySquares(team: Team): Position[] {
+  // team '0' はボード右上のタワーの奥を目指す
+  // team '1' はボード左下のタワーの奥を目指す
+  if (team === '0') {
+    return [{ x: 8, y: 0 }]; // チーム0の勝利マス（相手陣地）
+  } else {
+    return [{ x: 0, y: 8 }]; // チーム1の勝利マス（相手陣地）
+  }
+}
+
+// 指定位置が勝利マスかどうかをチェック
+function isVictorySquare(pos: Position, forTeam: Team): boolean {
+  const victorySquares = getVictorySquares(forTeam);
+  return victorySquares.some(vs => vs.x === pos.x && vs.y === pos.y);
+}
+
+// 自陣の勝利マス（敵が目指すマス）かどうかをチェック
+function isOwnVictorySquare(pos: Position, team: Team): boolean {
+  const enemyTeam = team === '0' ? '1' : '0';
+  return isVictorySquare(pos, enemyTeam);
+}
+
 function createTower(id: string, team: Team, x: number, y: number): Tower {
   return {
     id,
-    hp: 300,
-    maxHp: 300,
+    hp: 150,
+    maxHp: 150,
     pos: { x, y },
     team,
   };
@@ -145,7 +168,8 @@ export const LoLBoardGame = {
     selectCard: (
       { G, playerID }: { G: GameState; playerID: string },
       championId: string,
-      cardId: string
+      cardId: string,
+      isAlternativeMove?: boolean
     ) => {
       if (G.gamePhase !== 'planning') return;
       
@@ -167,6 +191,7 @@ export const LoLBoardGame = {
       const action: CardAction = {
         championId,
         cardId,
+        isAlternativeMove: isAlternativeMove || false,
       };
       
       G.turnActions[team].actions.push(action);
@@ -329,23 +354,15 @@ export const LoLBoardGame = {
   },
   
   endIf: ({ G }: { G: GameState }) => {
+    // 勝利判定: winnerが設定されていればそれを返す
+    if (G.winner) return { winner: G.winner };
+    
+    // タワー全滅による勝利（フォールバック）
     const team0Towers = G.towers.filter(t => t.team === '0').length;
     const team1Towers = G.towers.filter(t => t.team === '1').length;
     
     if (team0Towers === 0) return { winner: '1' };
     if (team1Towers === 0) return { winner: '0' };
-    
-    const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-    
-    const team0ReachedBase = allChampions.some(c => 
-      c.team === '0' && c.pos && c.pos.x === 8 && c.pos.y === 0
-    );
-    if (team0ReachedBase) return { winner: '0' };
-    
-    const team1ReachedBase = allChampions.some(c =>
-      c.team === '1' && c.pos && c.pos.x === 0 && c.pos.y === 8
-    );
-    if (team1ReachedBase) return { winner: '1' };
     
     return undefined;
   },
@@ -435,13 +452,49 @@ function resolveCardAction(
   const championDef = getChampionById(champion.definitionId);
   const championName = getChampionDisplayName(champion);
   
+  const enemyTeam = team === '0' ? '1' : '0';
+  
+  // 代替アクション: 1マス移動のみ（上下左右）
+  if (action.isAlternativeMove) {
+    if (action.targetPos) {
+      const dx = action.targetPos.x - champion.pos.x;
+      const dy = action.targetPos.y - champion.pos.y;
+      const isOrthogonal = (Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1);
+      
+      if (isOrthogonal) {
+        const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+        const isOccupied = allChampions.some(c => 
+          c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
+        );
+        const isTowerPos = G.towers.some(t => 
+          t.pos.x === action.targetPos!.x && t.pos.y === action.targetPos!.y
+        );
+        // 自陣の勝利マスには入れない
+        const isOwnVictory = isOwnVictorySquare(action.targetPos, team);
+        
+        if (!isOccupied && !isTowerPos && !isOwnVictory) {
+          champion.pos = action.targetPos;
+          G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した（代替アクション）`);
+          
+          // 勝利マス到達チェック
+          if (isVictorySquare(action.targetPos, team)) {
+            G.winner = team;
+            G.turnLog.push(`★★★ ${championName} が勝利マスに到達！チーム${team}の勝利！ ★★★`);
+          }
+        }
+      }
+    }
+    // カードを消費
+    champion.hand = champion.hand.filter(c => c.id !== card.id);
+    champion.usedCards.push(card);
+    return;
+  }
+  
   // へんげんじざい特性
   if (championDef?.ability === 'protean' && card.type !== 'normal') {
     champion.currentType = card.type;
     G.turnLog.push(`${championName} は ${getTypeNameJa(card.type)} タイプに変化した！`);
   }
-  
-  const enemyTeam = team === '0' ? '1' : '0';
   
   // 移動処理
   if (card.move > 0 && action.targetPos) {
@@ -454,12 +507,27 @@ function resolveCardAction(
       const isTowerPos = G.towers.some(t => 
         t.pos.x === action.targetPos!.x && t.pos.y === action.targetPos!.y
       );
+      // 自陣の勝利マスには入れない
+      const isOwnVictory = isOwnVictorySquare(action.targetPos, team);
       
-      if (!isOccupied && !isTowerPos) {
+      if (!isOccupied && !isTowerPos && !isOwnVictory) {
         champion.pos = action.targetPos;
         G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
+        
+        // 勝利マス到達チェック
+        if (isVictorySquare(action.targetPos, team)) {
+          G.winner = team;
+          G.turnLog.push(`★★★ ${championName} が勝利マスに到達！チーム${team}の勝利！ ★★★`);
+        }
       }
     }
+  }
+  
+  // 勝利が確定している場合は攻撃処理をスキップ
+  if (G.winner) {
+    champion.hand = champion.hand.filter(c => c.id !== card.id);
+    champion.usedCards.push(card);
+    return;
   }
   
   // 攻撃処理
@@ -643,8 +711,7 @@ function getMoveTowardsTarget(
  * 解決フェーズ終了
  */
 function finishResolutionPhase(G: GameState, random: any) {
-  // タワー攻撃
-  resolveTowerAttacks(G);
+  // タワーは攻撃しない（壁としてのみ機能）
   
   // 撃破チェック
   checkKnockouts(G);
@@ -681,36 +748,8 @@ function finishResolutionPhase(G: GameState, random: any) {
   G.turnLog.push('--- ターン終了 ---');
 }
 
-function resolveTowerAttacks(G: GameState) {
-  const TOWER_ATTACK = 40;
-  const TOWER_RANGE = 2;
-  
-  for (const tower of G.towers) {
-    const enemyTeam = tower.team === '0' ? '1' : '0';
-    const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
-    
-    let target: ChampionInstance | null = null;
-    let minDist = Infinity;
-    
-    for (const enemy of enemies) {
-      if (!enemy.pos) continue;
-      const dist = getDistance(tower.pos, enemy.pos);
-      if (dist <= TOWER_RANGE && dist < minDist) {
-        minDist = dist;
-        target = enemy;
-      }
-    }
-    
-    if (target) {
-      let damage = TOWER_ATTACK;
-      if (target.isGuarding) {
-        damage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
-      }
-      target.currentHp -= damage;
-      G.turnLog.push(`タワー(${tower.id}) が ${getChampionDisplayName(target)} に ${damage} ダメージ`);
-    }
-  }
-}
+// タワーは攻撃しない - 勝利マスへのアクセスをブロックする壁として機能
+// function resolveTowerAttacks は削除
 
 function checkKnockouts(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {

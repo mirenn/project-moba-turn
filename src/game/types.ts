@@ -82,6 +82,7 @@ export interface CardAction {
   cardId: string;          // 使用するカードのID
   targetPos?: Position;    // 移動先または攻撃対象位置
   targetChampionId?: string; // 攻撃対象のチャンピオンID
+  isAlternativeMove?: boolean; // 代替アクション（1マス移動のみ）として使用
 }
 
 // ガード行動指示

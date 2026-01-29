@@ -30,6 +30,7 @@ function getDistance(p1: Position, p2: Position): number {
 
 export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedChampionId, setSelectedChampionId] = useState<string | null>(null);
+  const [pendingCard, setPendingCard] = useState<Card | null>(null); // カード使用モード選択待ち
 
   const myPlayerID = (playerID || '0') as Team;
   const myPlayerState = G.players[myPlayerID];
@@ -57,10 +58,43 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     ? resolvingChampion.hand.find(c => c.id === (currentAction.action as any).cardId)
     : null;
 
+  // 代替アクションかどうかを取得
+  const isAlternativeMove = currentAction && !('discardCardIds' in currentAction.action)
+    ? (currentAction.action as any).isAlternativeMove
+    : false;
+
   // 移動可能なマスを計算
   const getValidMoveTargets = (): Position[] => {
-    if (!resolvingChampion || !resolvingChampion.pos || !resolvingCard) return [];
-    if (resolvingCard.move <= 0) return [];
+    if (!resolvingChampion || !resolvingChampion.pos) return [];
+
+    // 代替アクションの場合: 1マス（上下左右のみ）
+    if (isAlternativeMove) {
+      const positions: Position[] = [];
+      const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+      const orthogonalDirs = [
+        { dx: 1, dy: 0 },
+        { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: 0, dy: -1 },
+      ];
+
+      for (const dir of orthogonalDirs) {
+        const x = resolvingChampion.pos.x + dir.dx;
+        const y = resolvingChampion.pos.y + dir.dy;
+
+        if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) continue;
+
+        const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
+        const isTowerPos = G.towers.some(t => t.pos.x === x && t.pos.y === y);
+        if (!isOccupied && !isTowerPos) {
+          positions.push({ x, y });
+        }
+      }
+      return positions;
+    }
+
+    // 通常のカード移動
+    if (!resolvingCard || resolvingCard.move <= 0) return [];
 
     const positions: Position[] = [];
     const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
@@ -144,8 +178,29 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     if (!selectedChampion) return;
     if (actingChampionIds.includes(selectedChampion.id)) return;
 
-    moves.selectCard(selectedChampion.id, card.id);
+    // カード選択モード表示
+    setPendingCard(card);
+  };
+
+  // カードを通常使用
+  const handleUseCardNormal = () => {
+    if (!selectedChampion || !pendingCard) return;
+    moves.selectCard(selectedChampion.id, pendingCard.id, false);
+    setPendingCard(null);
     setSelectedChampionId(null);
+  };
+
+  // カードを代替アクション（1マス移動）として使用  
+  const handleUseCardAsMove = () => {
+    if (!selectedChampion || !pendingCard) return;
+    moves.selectCard(selectedChampion.id, pendingCard.id, true);
+    setPendingCard(null);
+    setSelectedChampionId(null);
+  };
+
+  // カード選択をキャンセル
+  const handleCancelCardSelection = () => {
+    setPendingCard(null);
   };
 
   const handleGuard = () => {
@@ -192,7 +247,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           フェイズ {G.currentPhase} / ターン {G.turnInPhase}
         </div>
         <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'planning' ? 'bg-blue-600' :
-            G.gamePhase === 'resolution' ? 'bg-orange-600' : 'bg-green-600'
+          G.gamePhase === 'resolution' ? 'bg-orange-600' : 'bg-green-600'
           }`}>
           {G.gamePhase === 'planning' ? '計画フェーズ' :
             G.gamePhase === 'resolution' ? '解決フェーズ' : '配置フェーズ'}
@@ -242,8 +297,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               <div
                 key={champion.id}
                 className={`p-2 rounded border ${champion.knockoutTurnsRemaining > 0
-                    ? 'border-red-800 bg-red-950 opacity-50'
-                    : 'border-slate-600 bg-slate-800'
+                  ? 'border-red-800 bg-red-950 opacity-50'
+                  : 'border-slate-600 bg-slate-800'
                   }`}
               >
                 <div className={`text-xs font-bold ${typeConfig.color}`}>
@@ -275,7 +330,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   actionText = 'ガード';
                 } else {
                   const card = champion.hand.find(c => c.id === action.cardId);
-                  actionText = card?.nameJa || 'カード';
+                  if (action.isAlternativeMove) {
+                    actionText = `${card?.nameJa || 'カード'} (1マス移動)`;
+                  } else {
+                    actionText = card?.nameJa || 'カード';
+                  }
                 }
 
                 return (
@@ -380,6 +439,40 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     <div className="text-green-400 text-sm p-2 bg-green-900/30 rounded flex items-center gap-2">
                       <Check size={14} />
                       行動選択済み
+                    </div>
+                  ) : pendingCard ? (
+                    /* カード使用方法選択UI */
+                    <div className="bg-slate-700 border border-yellow-500 rounded-lg p-3">
+                      <div className="text-yellow-300 text-sm font-bold mb-2">
+                        {pendingCard.nameJa} の使用方法
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          className="p-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold"
+                          onClick={handleUseCardNormal}
+                        >
+                          通常使用
+                          <span className="block text-xs font-normal opacity-75">
+                            {pendingCard.power > 0 ? `威力:${pendingCard.power}` : ''}
+                            {pendingCard.move > 0 ? ` 移動:${pendingCard.move}` : ''}
+                          </span>
+                        </button>
+                        <button
+                          className="p-2 rounded bg-green-600 hover:bg-green-500 text-white text-sm font-bold"
+                          onClick={handleUseCardAsMove}
+                        >
+                          1マス移動として使用
+                          <span className="block text-xs font-normal opacity-75">
+                            上下左右に1マス移動
+                          </span>
+                        </button>
+                        <button
+                          className="p-2 rounded bg-slate-600 hover:bg-slate-500 text-slate-300 text-sm"
+                          onClick={handleCancelCardSelection}
+                        >
+                          キャンセル
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <>
