@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { BoardProps } from 'boardgame.io/react';
-import { GameState, Team, ChampionInstance, Card, Position } from '../game/types';
+import { GameState, Team, ChampionInstance, Card, Position, Tower } from '../game/types';
 import { getChampionById } from '../game/champions';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
 
@@ -113,18 +113,31 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     return positions;
   };
 
-  // 攻撃可能な敵を計算
-  const getValidAttackTargets = (): ChampionInstance[] => {
+  // 攻撃可能な敵（チャンピオン・タワー）を計算
+  const getValidAttackTargets = (): (ChampionInstance | Tower)[] => {
     if (!resolvingChampion || !resolvingChampion.pos || !resolvingCard) return [];
     if (resolvingCard.power <= 0) return [];
 
-    const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
     const attackRange = resolvingCard.move > 0 ? 3 : 2; // 移動後を考慮して少し広めに
+    const targets: (ChampionInstance | Tower)[] = [];
 
-    return enemies.filter(enemy => {
-      if (!enemy.pos || !resolvingChampion.pos) return false;
-      return getDistance(resolvingChampion.pos, enemy.pos) <= attackRange;
+    // 敵チャンピオン
+    const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
+    enemies.forEach(enemy => {
+      if (enemy.pos && resolvingChampion.pos && getDistance(resolvingChampion.pos, enemy.pos) <= attackRange) {
+        targets.push(enemy);
+      }
     });
+
+    // 敵タワー
+    const enemyTowers = G.towers.filter(t => t.team === enemyTeam);
+    enemyTowers.forEach(tower => {
+      if (resolvingChampion.pos && getDistance(resolvingChampion.pos, tower.pos) <= attackRange) {
+        targets.push(tower);
+      }
+    });
+
+    return targets;
   };
 
   const validMoveTargets = isAwaitingTarget ? getValidMoveTargets() : [];
@@ -140,21 +153,46 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const handleCellClick = (x: number, y: number) => {
     // 解決フェーズ: ターゲット選択
     if (isResolutionPhase && isAwaitingTarget) {
-      const { champion } = getCellContent(x, y);
+      const { champion, tower } = getCellContent(x, y);
 
       // 移動先として選択
       const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
       if (isMoveTarget) {
-        // 敵がいれば攻撃対象も設定
-        const targetEnemy = validAttackTargets.find(e => e.pos);
-        moves.selectTarget({ x, y }, targetEnemy?.id);
+        // 敵がいれば攻撃対象も設定（移動攻撃）- 単純化のため敵がいるマスへの移動攻撃は一旦チャンピオン優先
+        // ※実際には移動後に射程内の敵を選ぶUIが必要だが、簡易的に「移動先にいる敵」または「移動後に最も近い敵」を選ぶロジックが必要
+        // 現状の実装: 移動先を選択 -> その後攻撃対象を選ぶフローにはなっていない。
+        // （moveとattackがセットになったカードの場合、移動先 = 攻撃位置という簡易実装になっている箇所がある）
+
+        // 移動先に敵がいる場合
+        let targetId = undefined;
+        let targetTowerId = undefined;
+
+        const targetEnemy = validAttackTargets.find(t =>
+          'definitionId' in t && t.pos?.x === x && t.pos?.y === y
+        ) as ChampionInstance | undefined;
+
+        const targetEnemyTower = validAttackTargets.find(t =>
+          !('definitionId' in t) && t.pos.x === x && t.pos.y === y
+        ) as Tower | undefined;
+
+        if (targetEnemy) targetId = targetEnemy.id;
+        else if (targetEnemyTower) targetTowerId = targetEnemyTower.id;
+
+        // moves.selectTarget(targetPos, targetChampionId, targetTowerId)
+        moves.selectTarget({ x, y }, targetId, targetTowerId);
         return;
       }
 
-      // 攻撃対象として選択（移動なしカードの場合）
-      if (champion && champion.team === enemyTeam && resolvingCard?.move === 0) {
-        moves.selectTarget(undefined, champion.id);
-        return;
+      // 攻撃対象として選択（移動なしカードの場合、または射程内への直接攻撃）
+      if (resolvingCard?.move === 0) {
+        if (champion && champion.team === enemyTeam) {
+          moves.selectTarget(undefined, champion.id, undefined);
+          return;
+        }
+        if (tower && tower.team === enemyTeam) {
+          moves.selectTarget(undefined, undefined, tower.id);
+          return;
+        }
       }
       return;
     }
@@ -348,7 +386,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
               // 解決フェーズのハイライト
               const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
-              const isAttackTarget = champion && validAttackTargets.some(e => e.id === champion.id);
+              const isAttackTarget = validAttackTargets.some(t => t.pos && t.pos.x === x && t.pos.y === y);
               const isResolvingChamp = resolvingChampion?.id === champion?.id;
 
               let bgClass = 'bg-slate-700 hover:bg-slate-600';
@@ -366,7 +404,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                 >
                   {tower && (
                     <div className={`flex flex-col items-center ${tower.team === '0' ? 'text-blue-400' : 'text-red-400'}`}>
-                      <div className="text-lg">🏰</div>
+                      <div className="relative">
+                        <div className="text-lg">🏰</div>
+                        <div className={`absolute -top-2 -right-2 w-4 h-4 rounded-full flex items-center justify-center ${getTypeConfig(tower.type).bgColor} ring-1 ring-white/50`}>
+                          {getTypeConfig(tower.type).icon}
+                        </div>
+                      </div>
                       <span className="text-[10px]">{tower.hp}</span>
                     </div>
                   )}

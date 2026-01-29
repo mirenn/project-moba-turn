@@ -10,7 +10,8 @@ import {
   GuardAction,
   TurnAction,
   Card,
-  PendingAction
+  PendingAction,
+  ElementType
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
@@ -45,13 +46,14 @@ function isOwnVictorySquare(pos: Position, team: Team): boolean {
   return isVictorySquare(pos, enemyTeam);
 }
 
-function createTower(id: string, team: Team, x: number, y: number): Tower {
+function createTower(id: string, team: Team, x: number, y: number, type: ElementType): Tower {
   return {
     id,
     hp: 150,
     maxHp: 150,
     pos: { x, y },
     team,
+    type,
   };
 }
 
@@ -123,19 +125,27 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
   };
 }
 
+const ELEMENT_TYPES: ElementType[] = [
+  'normal', 'fire', 'water', 'electric', 'grass', 'ice', 'fighting', 'poison', 'ground', 
+  'flying', 'psychic', 'bug', 'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy'
+];
+
 export const LoLBoardGame = {
   name: 'lol-board-game',
 
-  setup: (): GameState => {
+  setup: ({ random }: { random: any }): GameState => {
     const towers: Tower[] = [];
+    
+    // タイプをランダムに決定するヘルパー
+    const getRandomType = () => ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
 
-    towers.push(createTower('tower-0-1', '0', 0, 4));
-    towers.push(createTower('tower-0-2', '0', 2, 6));
-    towers.push(createTower('tower-0-3', '0', 4, 8));
+    towers.push(createTower('tower-0-1', '0', 0, 4, getRandomType()));
+    towers.push(createTower('tower-0-2', '0', 2, 6, getRandomType()));
+    towers.push(createTower('tower-0-3', '0', 4, 8, getRandomType()));
 
-    towers.push(createTower('tower-1-1', '1', 8, 4));
-    towers.push(createTower('tower-1-2', '1', 6, 2));
-    towers.push(createTower('tower-1-3', '1', 4, 0));
+    towers.push(createTower('tower-1-1', '1', 8, 4, getRandomType()));
+    towers.push(createTower('tower-1-2', '1', 6, 2, getRandomType()));
+    towers.push(createTower('tower-1-3', '1', 4, 0, getRandomType()));
 
     const team0Champions = ['gekogekoga', 'enshishi', 'raichou', 'kidouba'];
     const team1Champions = ['kidouba', 'raichou', 'enshishi', 'gekogekoga'];
@@ -287,7 +297,8 @@ export const LoLBoardGame = {
     selectTarget: (
       { G, random }: { G: GameState; random: any },
       targetPos?: Position,
-      targetChampionId?: string
+      targetChampionId?: string,
+      targetTowerId?: string
     ) => {
       if (G.gamePhase !== 'resolution') return;
       if (!G.currentResolvingAction) return;
@@ -302,6 +313,7 @@ export const LoLBoardGame = {
         // カードアクションを実行
         action.targetPos = targetPos;
         action.targetChampionId = targetChampionId;
+        action.targetTowerId = targetTowerId;
         resolveCardAction(G, action, team, random);
       }
       
@@ -531,69 +543,121 @@ function resolveCardAction(
   }
   
   // 攻撃処理
-  if (card.power > 0 && action.targetChampionId) {
-    const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
+  if (card.power > 0) {
+    const attackRange = card.move > 0 ? 1 : 2;
     
-    if (target && target.pos) {
-      const dist = getDistance(champion.pos, target.pos);
-      const attackRange = card.move > 0 ? 1 : 2;
+    // チャンピオンへの攻撃
+    if (action.targetChampionId) {
+      const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
       
-      if (dist <= attackRange) {
-        const { damage, effectiveness } = calculateDamage(
-          card.power,
-          card.type,
-          champion.currentType,
-          target.currentType
-        );
+      if (target && target.pos) {
+        const dist = getDistance(champion.pos, target.pos);
         
-        let finalDamage = damage;
-        if (target.isGuarding) {
-          finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
-          G.turnLog.push(`${getChampionDisplayName(target)} はガードしている！`);
-        }
-        
-        // みずしゅりけん
-        if (card.effectFn === 'multiHit') {
-          const hits = 2 + Math.floor(random.Number() * 3);
-          finalDamage = finalDamage * hits;
-          G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
-        }
-        
-        target.currentHp -= finalDamage;
-        
-        let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
-        if (effectiveness) logMsg += ` ${effectiveness}`;
-        G.turnLog.push(logMsg);
-        
-        // ノックバック
-        if (card.effectFn === 'knockback' && random.Number() < 0.3 && target.pos) {
-          const dx = target.pos.x - champion.pos.x;
-          const dy = target.pos.y - champion.pos.y;
-          const newX = target.pos.x + (dx !== 0 ? Math.sign(dx) : 0);
-          const newY = target.pos.y + (dy !== 0 ? Math.sign(dy) : 0);
+        if (dist <= attackRange) {
+          const { damage, effectiveness } = calculateDamage(
+            card.power,
+            card.type,
+            champion.currentType,
+            target.currentType
+          );
           
-          if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE) {
-            target.pos = { x: newX, y: newY };
-            G.turnLog.push(`${getChampionDisplayName(target)} は押し出された！`);
+          let finalDamage = damage;
+          if (target.isGuarding) {
+            finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
+            G.turnLog.push(`${getChampionDisplayName(target)} はガードしている！`);
           }
+          
+          // みずしゅりけん
+          if (card.effectFn === 'multiHit') {
+            const hits = 2 + Math.floor(random.Number() * 3);
+            finalDamage = finalDamage * hits;
+            G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
+          }
+          
+          target.currentHp -= finalDamage;
+          
+          let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
+          if (effectiveness) logMsg += ` ${effectiveness}`;
+          G.turnLog.push(logMsg);
+          
+          // ノックバック
+          if (card.effectFn === 'knockback' && random.Number() < 0.3 && target.pos) {
+            const dx = target.pos.x - champion.pos.x;
+            const dy = target.pos.y - champion.pos.y;
+            const newX = target.pos.x + (dx !== 0 ? Math.sign(dx) : 0);
+            const newY = target.pos.y + (dy !== 0 ? Math.sign(dy) : 0);
+            
+            if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE) {
+              target.pos = { x: newX, y: newY };
+              G.turnLog.push(`${getChampionDisplayName(target)} は押し出された！`);
+            }
+          }
+          
+          // 反動
+          if (card.effectFn === 'recoil') {
+            const recoilDamage = Math.floor(finalDamage / 3);
+            champion.currentHp -= recoilDamage;
+            G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
+          }
+          
+          // 撃破チェック
+          if (target.currentHp <= 0) {
+            target.pos = null;
+            target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
+            target.currentHp = 0;
+            G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！`);
+          }
+        } else {
+          G.turnLog.push(`${championName} の ${card.nameJa}！ しかし ${getChampionDisplayName(target)} に届かなかった...`);
         }
+      }
+    }
+    // タワーへの攻撃
+    else if (action.targetTowerId) {
+      const target = G.towers.find(t => t.id === action.targetTowerId);
+      
+      if (target) {
+        const dist = getDistance(champion.pos, target.pos);
         
-        // 反動
-        if (card.effectFn === 'recoil') {
-          const recoilDamage = Math.floor(finalDamage / 3);
-          champion.currentHp -= recoilDamage;
-          G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
+        if (dist <= attackRange) {
+          // タワーへのダメージ計算（タイプ相性あり）
+          const { damage, effectiveness } = calculateDamage(
+            card.power,
+            card.type,
+            champion.currentType,
+            target.type
+          );
+          
+          let finalDamage = damage;
+          
+          // みずしゅりけん等の連続攻撃
+          if (card.effectFn === 'multiHit') {
+            const hits = 2 + Math.floor(random.Number() * 3);
+            finalDamage = finalDamage * hits;
+            G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
+          }
+          
+          target.hp -= finalDamage;
+          
+          let logMsg = `${championName} の ${card.nameJa}！ タワー(${target.id}) に ${finalDamage} ダメージ`;
+          if (effectiveness) logMsg += ` ${effectiveness}`;
+          G.turnLog.push(logMsg);
+          
+          // 反動
+          if (card.effectFn === 'recoil') {
+            const recoilDamage = Math.floor(finalDamage / 3);
+            champion.currentHp -= recoilDamage;
+            G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
+          }
+          
+          // 破壊チェックはチェックノックアウトフェーズで行われるが、ログのためにここでも確認可
+          if (target.hp <= 0) {
+             // 実際の破壊処理は checkKnockouts で一括で行う
+             G.turnLog.push(`タワー(${target.id}) を破壊した！`);
+          }
+        } else {
+          G.turnLog.push(`${championName} の ${card.nameJa}！ しかしタワー(${target.id}) に届かなかった...`);
         }
-        
-        // 撃破チェック
-        if (target.currentHp <= 0) {
-          target.pos = null;
-          target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
-          target.currentHp = 0;
-          G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！`);
-        }
-      } else {
-        G.turnLog.push(`${championName} の ${card.nameJa}！ しかし届かなかった...`);
       }
     }
   }
@@ -728,7 +792,13 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.turnInPhase = 1;
     G.currentPhase++;
     refillCards(G);
-    G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
+    
+    // タワーのタイプを変更
+    G.towers.forEach(tower => {
+      tower.type = ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
+    });
+    
+    G.turnLog.push(`=== フェイズ${G.currentPhase}開始 (タワー属性変化) ===`);
   }
   
   // 計画フェーズに戻る

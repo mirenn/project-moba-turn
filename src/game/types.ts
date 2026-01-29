@@ -74,6 +74,7 @@ export interface Tower {
   maxHp: number;
   pos: Position;
   team: Team;
+  type: ElementType; // タワーの属性タイプ
 }
 
 // カードプレイによる行動指示
@@ -82,6 +83,7 @@ export interface CardAction {
   cardId: string;          // 使用するカードのID
   targetPos?: Position;    // 移動先または攻撃対象位置
   targetChampionId?: string; // 攻撃対象のチャンピオンID
+  targetTowerId?: string;    // 攻撃対象のタワーID
   isAlternativeMove?: boolean; // 代替アクション（1マス移動のみ）として使用
 }
 
