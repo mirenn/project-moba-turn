@@ -30,7 +30,6 @@ function getDistance(p1: Position, p2: Position): number {
 
 export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedChampionId, setSelectedChampionId] = useState<string | null>(null);
-  const [pendingCard, setPendingCard] = useState<Card | null>(null); // カード使用モード選択待ち
 
   const myPlayerID = (playerID || '0') as Team;
   const myPlayerState = G.players[myPlayerID];
@@ -173,34 +172,13 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     }
   };
 
-  const handleCardClick = (card: Card) => {
+  const handleCardClick = (card: Card, isAlternative = false) => {
     if (G.gamePhase !== 'planning') return;
     if (!selectedChampion) return;
     if (actingChampionIds.includes(selectedChampion.id)) return;
 
-    // カード選択モード表示
-    setPendingCard(card);
-  };
-
-  // カードを通常使用
-  const handleUseCardNormal = () => {
-    if (!selectedChampion || !pendingCard) return;
-    moves.selectCard(selectedChampion.id, pendingCard.id, false);
-    setPendingCard(null);
+    moves.selectCard(selectedChampion.id, card.id, isAlternative);
     setSelectedChampionId(null);
-  };
-
-  // カードを代替アクション（1マス移動）として使用  
-  const handleUseCardAsMove = () => {
-    if (!selectedChampion || !pendingCard) return;
-    moves.selectCard(selectedChampion.id, pendingCard.id, true);
-    setPendingCard(null);
-    setSelectedChampionId(null);
-  };
-
-  // カード選択をキャンセル
-  const handleCancelCardSelection = () => {
-    setPendingCard(null);
   };
 
   const handleGuard = () => {
@@ -440,40 +418,6 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                       <Check size={14} />
                       行動選択済み
                     </div>
-                  ) : pendingCard ? (
-                    /* カード使用方法選択UI */
-                    <div className="bg-slate-700 border border-yellow-500 rounded-lg p-3">
-                      <div className="text-yellow-300 text-sm font-bold mb-2">
-                        {pendingCard.nameJa} の使用方法
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button
-                          className="p-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold"
-                          onClick={handleUseCardNormal}
-                        >
-                          通常使用
-                          <span className="block text-xs font-normal opacity-75">
-                            {pendingCard.power > 0 ? `威力:${pendingCard.power}` : ''}
-                            {pendingCard.move > 0 ? ` 移動:${pendingCard.move}` : ''}
-                          </span>
-                        </button>
-                        <button
-                          className="p-2 rounded bg-green-600 hover:bg-green-500 text-white text-sm font-bold"
-                          onClick={handleUseCardAsMove}
-                        >
-                          1マス移動として使用
-                          <span className="block text-xs font-normal opacity-75">
-                            上下左右に1マス移動
-                          </span>
-                        </button>
-                        <button
-                          className="p-2 rounded bg-slate-600 hover:bg-slate-500 text-slate-300 text-sm"
-                          onClick={handleCancelCardSelection}
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </div>
                   ) : (
                     <>
                       {selectedChampion.hand.map(card => {
@@ -481,20 +425,37 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         return (
                           <div
                             key={card.id}
-                            className="p-2 rounded border cursor-pointer transition-all border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-yellow-400"
-                            onClick={() => handleCardClick(card)}
+                            className="flex items-stretch gap-1 mb-2"
                           >
-                            <div className="flex items-center gap-1">
-                              <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
-                                {typeConfig.icon}
-                                <span className="text-[10px] text-white">{card.priority}</span>
+                            {/* 通常使用ボタン（カード本体） */}
+                            <div
+                              className="flex-1 p-2 rounded border cursor-pointer transition-all border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-yellow-400 group"
+                              onClick={() => handleCardClick(card, false)}
+                            >
+                              <div className="flex items-center gap-1">
+                                <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
+                                  {typeConfig.icon}
+                                  <span className="text-[10px] text-white">{card.priority}</span>
+                                </div>
+                                <span className="text-xs font-bold group-hover:text-yellow-200">{card.nameJa}</span>
                               </div>
-                              <span className="text-xs font-bold">{card.nameJa}</span>
+                              <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
+                                {card.power > 0 && <span>威力:{card.power}</span>}
+                                {card.move > 0 && <span>移動:{card.move}</span>}
+                              </div>
                             </div>
-                            <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
-                              {card.power > 0 && <span>威力:{card.power}</span>}
-                              {card.move > 0 && <span>移動:{card.move}</span>}
-                            </div>
+
+                            {/* 代替アクション（移動）ボタン */}
+                            <button
+                              className="w-10 flex items-center justify-center rounded border border-slate-600 bg-slate-700 text-green-500 hover:bg-green-700 hover:border-green-400 hover:text-white transition-all shadow-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCardClick(card, true);
+                              }}
+                              title="代替アクション: 上下左右に1マス移動"
+                            >
+                              <Move size={20} />
+                            </button>
                           </div>
                         );
                       })}
