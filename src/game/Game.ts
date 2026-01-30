@@ -497,7 +497,10 @@ export const LoLBoardGame = {
     activePlayers: ActivePlayers.ALL,
     onBegin: ({ G }: { G: GameState }) => {
       G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
-      G.gamePhase = 'planning';
+      // 配置フェーズ中はgamePhaseを上書きしない
+      if (G.gamePhase !== 'deploy') {
+        G.gamePhase = 'planning';
+      }
       G.pendingActions = [];
       G.currentResolvingAction = null;
       G.awaitingTargetSelection = false;
@@ -917,6 +920,24 @@ function getMoveTowardsTarget(
 }
 
 /**
+ * 配置が必要かどうかをチェック
+ * 場に3体未満のチームがあり、かつ配置可能なチャンピオン（ノックアウトされていない控え）がいる場合true
+ */
+function needsDeployPhase(G: GameState): boolean {
+  for (const team of ['0', '1'] as Team[]) {
+    const deployedCount = G.players[team].champions.filter(c => c.pos !== null).length;
+    const canDeployMore = G.players[team].champions.some(c => 
+      c.pos === null && c.knockoutTurnsRemaining === 0
+    );
+    // 3体未満で、かつ配置可能なチャンピオンがいる
+    if (deployedCount < CHAMPIONS_ON_FIELD && canDeployMore) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 解決フェーズ終了
  */
 function finishResolutionPhase(G: GameState, random: any) {
@@ -933,9 +954,11 @@ function finishResolutionPhase(G: GameState, random: any) {
   
   // ターン/フェイズ進行
   G.turnInPhase++;
+  let isNewPhase = false;
   if (G.turnInPhase > TURNS_PER_PHASE) {
     G.turnInPhase = 1;
     G.currentPhase++;
+    isNewPhase = true;
     refillCards(G);
     
     // タワーのタイプを変更
@@ -946,47 +969,7 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 (タワー属性変化) ===`);
   }
   
-  // 計画フェーズに戻る
-  // 配置フェーズに戻る (または必要なければ計画へ)
-  // 今回の仕様変更: 各フェイズ開始時にも配置フェーズがある
-  // しかし、フェイズ遷移で一度 Deploy に戻す必要がある
-  
-  // 今は簡易的に「計画フェーズ」に戻しているが、復活したチャンピオンを出すために「配置フェーズ」へ移行する
-  G.gamePhase = 'deploy';
-  // フェーズ遷移を手動で制御するのはboardgame.ioのphases機能と競合する可能性あるが、
-  // ここでは gamePhase 変数でUI制御しつつ、boardgame.ioのphaseも切り替えるのが理想。
-  // しかし setup で phases を定義すると flow が変わる。
-  // 一旦、gamePhase 変数だけで制御する形（Global movesでバリデーション）を維持しつつ、
-  // boardgame.io の phase 機能は使わずに実装するほうが安全かもしれない（既存ロジックへの影響小）。
-  // -> 前言撤回: ユーザー要望の「交互に」を実現するには boardgame.io の turn order 機能を使うのが楽。
-  // なので、phases 機能を使う実装に切り替えるべき。
-  
-  // しかし既存コードは `turn` オブジェクトで `ActivePlayers.ALL` を使っている（同時手番）。
-  // Deployフェーズだけ 交互手番 (DEFAULT) にしたい。
-  
-  // よって、finishResolutionPhase の最後で:
-  // events.setPhase('deploy');
-  // のようにしたいが、finishResolutionPhase は reducer 内部の関数なので events オブジェクトにアクセスできない。
-  // boardgame.io の仕様上、G を書き換えるだけでは phase は変わらない。
-  
-  // 妥協案: deploy フェーズも ActivePlayers.ALL (同時) にして、
-  // 実装で「ターンプレイヤーかどうか」をチェックせず、早いもの勝ち...はまずい。
-  
-  // 解決策: finishResolutionPhase は G を更新するだけにし、
-  // move (confirmPlan -> processNextAction -> ... -> finish) の流れの中で
-  // 最後に events.setPhase('deploy') を呼ぶ必要があるが、processNextAction は再帰的で難しい。
-  
-  // 修正方針:
-  // 1. phases を導入する。
-  // 2. logic を修正して、G.gamePhase だけでなく ctx.phase を意識するようにする。
-  // 3. しかし大規模改修になるので、
-  //    現状の ActivePlayers.ALL のまま、「手番管理」を G 内部で擬似的に行う。
-  //    G.deployTurn = '0' | '1';
-  //    deployChampion move でこれをチェックして入れ替える。
-  
-  G.gamePhase = 'deploy';
-  G.deployTurn = '0'; // 青チームから開始（またはランダム）
-  
+  // 状態リセット
   G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
   G.pendingActions = [];
   G.currentResolvingAction = null;
@@ -997,6 +980,17 @@ function finishResolutionPhase(G: GameState, random: any) {
     for (const champion of G.players[team].champions) {
       champion.isGuarding = false;
     }
+  }
+  
+  // 4ターンに1回（フェーズ開始時）のみ配置フェーズに移行
+  // ただし、配置が必要な場合（3体未満のチームがある場合）のみ
+  if (isNewPhase && needsDeployPhase(G)) {
+    G.gamePhase = 'deploy';
+    G.deployTurn = '0'; // 青チームから開始
+    G.turnLog.push('--- 配置フェーズ開始 ---');
+  } else {
+    // 配置不要なら計画フェーズへ
+    G.gamePhase = 'planning';
   }
   
   G.turnLog.push('--- ターン終了 ---');
