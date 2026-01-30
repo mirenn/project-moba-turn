@@ -1,4 +1,4 @@
-import { ActivePlayers } from 'boardgame.io/core';
+import { ActivePlayers, TurnOrder } from 'boardgame.io/core';
 import { 
   GameState, 
   Tower, 
@@ -85,22 +85,35 @@ function createChampionInstance(
   };
 }
 
-function getSpawnPositions(team: Team): Position[] {
+export function getSpawnPositions(team: Team): Position[] {
+  // タワー周辺のスポーン可能マスを定義
+  // タワー位置:
+  // Team 0: (0,4), (2,6), (4,8)
+  // Team 1: (8,4), (6,2), (4,0)
+  
   if (team === '0') {
+    // 青チーム: 左上〜真ん中にかけてのタワー周辺
     return [
-      { x: 0, y: 6 },
-      { x: 0, y: 7 },
-      { x: 0, y: 8 },
-      { x: 1, y: 7 },
-      { x: 1, y: 8 },
+      // around (0,4)
+      { x: 0, y: 3 }, { x: 1, y: 3 }, { x: 1, y: 4 }, { x: 1, y: 5 }, { x: 0, y: 5 },
+      // around (2,6)
+      { x: 1, y: 6 }, { x: 2, y: 5 }, { x: 3, y: 6 }, { x: 2, y: 7 },
+      // around (4,8)
+      { x: 3, y: 8 }, { x: 4, y: 7 }, { x: 5, y: 8 }, 
+      // backups if needed
+      { x: 3, y: 7 }, { x: 1, y: 7 }, { x: 0, y: 2 }, { x: 2, y: 4 }
     ];
   } else {
+    // 赤チーム: 右下〜真ん中にかけてのタワー周辺
     return [
-      { x: 8, y: 0 },
-      { x: 8, y: 1 },
-      { x: 8, y: 2 },
-      { x: 7, y: 0 },
-      { x: 7, y: 1 },
+      // around (8,4)
+      { x: 8, y: 3 }, { x: 7, y: 3 }, { x: 7, y: 4 }, { x: 7, y: 5 }, { x: 8, y: 5 },
+      // around (6,2)
+      { x: 7, y: 2 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 6, y: 3 },
+      // around (4,0)
+      { x: 5, y: 0 }, { x: 4, y: 1 }, { x: 3, y: 0 },
+      // backups
+      { x: 5, y: 1 }, { x: 7, y: 1 }, { x: 8, y: 6 }, { x: 6, y: 4 }
     ];
   }
 }
@@ -114,7 +127,8 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
   const initialPositions = getInitialPositions(team);
   
   const champions: ChampionInstance[] = championIds.map((defId, idx) => {
-    const pos = idx < CHAMPIONS_ON_FIELD ? initialPositions[idx] : null;
+    // 初期配置はnull（展開フェーズで配置）
+    const pos = null;
     return createChampionInstance(defId, team, idx, pos);
   }).filter((c): c is ChampionInstance => c !== null);
   
@@ -130,50 +144,7 @@ const ELEMENT_TYPES: ElementType[] = [
   'flying', 'psychic', 'bug', 'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy'
 ];
 
-export const LoLBoardGame = {
-  name: 'lol-board-game',
-
-  setup: ({ random }: { random: any }): GameState => {
-    const towers: Tower[] = [];
-    
-    // タイプをランダムに決定するヘルパー
-    const getRandomType = () => ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
-
-    towers.push(createTower('tower-0-1', '0', 0, 4, getRandomType()));
-    towers.push(createTower('tower-0-2', '0', 2, 6, getRandomType()));
-    towers.push(createTower('tower-0-3', '0', 4, 8, getRandomType()));
-
-    towers.push(createTower('tower-1-1', '1', 8, 4, getRandomType()));
-    towers.push(createTower('tower-1-2', '1', 6, 2, getRandomType()));
-    towers.push(createTower('tower-1-3', '1', 4, 0, getRandomType()));
-
-    const team0Champions = ['gekogekoga', 'enshishi', 'raichou', 'kidouba'];
-    const team1Champions = ['kidouba', 'raichou', 'enshishi', 'gekogekoga'];
-
-    const players: Record<Team, PlayerState> = {
-      '0': initializePlayerState('0', team0Champions),
-      '1': initializePlayerState('1', team1Champions),
-    };
-
-    return {
-      players,
-      towers,
-      currentPhase: 1,
-      turnInPhase: 1,
-      turnActions: { 
-        '0': { actions: [] }, 
-        '1': { actions: [] } 
-      },
-      turnLog: ['ゲーム開始 - 9×9ボード', '【ルール】カード選択後、解決フェーズでターゲットを選びます'],
-      gamePhase: 'planning',
-      winner: null,
-      pendingActions: [],
-      currentResolvingAction: null,
-      awaitingTargetSelection: false,
-    };
-  },
-
-  moves: {
+const commonMoves = {
     // 計画フェーズ: カードを選択
     selectCard: (
       { G, playerID }: { G: GameState; playerID: string },
@@ -346,6 +317,135 @@ export const LoLBoardGame = {
       G.currentResolvingAction = null;
       processNextAction(G, random);
     },
+
+    // 配置フェーズ: チャンピオンを配置
+    deployChampion: (
+      { G, playerID, events }: { G: GameState; playerID: string; events: any },
+      championId: string,
+      x: number,
+      y: number
+    ) => {
+      if (G.gamePhase !== 'deploy') return;
+      
+      // 手番チェック
+      if (G.deployTurn && G.deployTurn !== playerID) return;
+
+      const team = playerID as Team;
+      const player = G.players[team];
+      
+      const champion = player.champions.find(c => c.id === championId);
+      if (!champion) return;
+      if (champion.pos !== null) return; // 既に配置済み
+      
+      // 配置位置の妥当性チェック
+      // 1. 他のユニットがいないか
+      const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+      if (allChampions.some(c => c.pos?.x === x && c.pos?.y === y) || 
+          G.towers.some(t => t.pos.x === x && t.pos.y === y)) {
+        return; // 重なっている
+      }
+      
+      // 2. スポーン可能エリアか (簡易チェック: getSpawnPositionsに含まれるか)
+      // より厳密には「自軍タワーの周囲1マス」
+      const spawnable = getSpawnPositions(team);
+      if (!spawnable.some(p => p.x === x && p.y === y)) {
+        return; // エリア外
+      }
+      
+      // 配置実行
+      champion.pos = { x, y };
+      G.turnLog.push(`${getChampionDisplayName(champion)} を (${x}, ${y}) に配置しました`);
+      
+      // 手番を交代
+      G.deployTurn = G.deployTurn === '0' ? '1' : '0';
+      events.endTurn({ next: G.deployTurn });
+    },
+};
+
+export const LoLBoardGame = {
+  name: 'lol-board-game',
+
+  setup: ({ random }: { random: any }): GameState => {
+    const towers: Tower[] = [];
+    
+    // タイプをランダムに決定するヘルパー
+    const getRandomType = () => ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
+
+    towers.push(createTower('tower-0-1', '0', 0, 4, getRandomType()));
+    towers.push(createTower('tower-0-2', '0', 2, 6, getRandomType()));
+    towers.push(createTower('tower-0-3', '0', 4, 8, getRandomType()));
+
+    towers.push(createTower('tower-1-1', '1', 8, 4, getRandomType()));
+    towers.push(createTower('tower-1-2', '1', 6, 2, getRandomType()));
+    towers.push(createTower('tower-1-3', '1', 4, 0, getRandomType()));
+
+    const team0Champions = ['gekogekoga', 'enshishi', 'raichou', 'kidouba'];
+    const team1Champions = ['kidouba', 'raichou', 'enshishi', 'gekogekoga'];
+
+    const players: Record<Team, PlayerState> = {
+      '0': initializePlayerState('0', team0Champions),
+      '1': initializePlayerState('1', team1Champions),
+    };
+
+    return {
+      players,
+      towers,
+      currentPhase: 1,
+      turnInPhase: 1,
+      turnActions: { 
+        '0': { actions: [] }, 
+        '1': { actions: [] } 
+      },
+      turnLog: ['ゲーム開始 - 9×9ボード', '【ルール】まずはチャンピオンを配置してください'],
+      gamePhase: 'deploy',
+      deployTurn: '0',
+      winner: null,
+      pendingActions: [],
+      currentResolvingAction: null,
+      awaitingTargetSelection: false,
+    };
+  },
+
+  moves: {
+    ...commonMoves
+  },
+  
+  phases: {
+    deploy: {
+      start: true,
+      next: 'main',
+      turn: {
+        order: TurnOrder.RESET,
+        activePlayers: { currentPlayer: 'deploy' },
+      },
+      moves: {
+        deployChampion: commonMoves.deployChampion,
+      },
+      endIf: ({ G }: { G: GameState }) => {
+        // 両チームが3体ずつ配置したら終了
+        const team0Deployed = G.players['0'].champions.filter(c => c.pos !== null).length;
+        const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
+        // ベンチの数や撃破状態も考慮必要だが、初期配置・再配置フェーズでは
+        // 「出撃可能なチャンピオン(knockoutTurns=0)で、まだFieldにいないもの」を出し切るまで、あるいはFieldが3体になるまで
+        
+        // 簡易判定: Field上限(3)に達しているか、または出せる駒がもうない
+        const team0Ready = team0Deployed >= 3 || G.players['0'].champions.every(c => c.pos !== null || c.knockoutTurnsRemaining > 0);
+        const team1Ready = team1Deployed >= 3 || G.players['1'].champions.every(c => c.pos !== null || c.knockoutTurnsRemaining > 0);
+        
+        return team0Ready && team1Ready;
+      },
+      onEnd: ({ G }: { G: GameState }) => {
+        G.gamePhase = 'planning';
+        G.turnLog.push('--- 配置完了: 計画フェーズ開始 ---');
+      }
+    },
+    main: {
+      moves: {
+      moves: {
+        ...commonMoves
+      }
+      }
+    }
   },
 
   turn: {
@@ -802,7 +902,46 @@ function finishResolutionPhase(G: GameState, random: any) {
   }
   
   // 計画フェーズに戻る
-  G.gamePhase = 'planning';
+  // 配置フェーズに戻る (または必要なければ計画へ)
+  // 今回の仕様変更: 各フェイズ開始時にも配置フェーズがある
+  // しかし、フェイズ遷移で一度 Deploy に戻す必要がある
+  
+  // 今は簡易的に「計画フェーズ」に戻しているが、復活したチャンピオンを出すために「配置フェーズ」へ移行する
+  G.gamePhase = 'deploy';
+  // フェーズ遷移を手動で制御するのはboardgame.ioのphases機能と競合する可能性あるが、
+  // ここでは gamePhase 変数でUI制御しつつ、boardgame.ioのphaseも切り替えるのが理想。
+  // しかし setup で phases を定義すると flow が変わる。
+  // 一旦、gamePhase 変数だけで制御する形（Global movesでバリデーション）を維持しつつ、
+  // boardgame.io の phase 機能は使わずに実装するほうが安全かもしれない（既存ロジックへの影響小）。
+  // -> 前言撤回: ユーザー要望の「交互に」を実現するには boardgame.io の turn order 機能を使うのが楽。
+  // なので、phases 機能を使う実装に切り替えるべき。
+  
+  // しかし既存コードは `turn` オブジェクトで `ActivePlayers.ALL` を使っている（同時手番）。
+  // Deployフェーズだけ 交互手番 (DEFAULT) にしたい。
+  
+  // よって、finishResolutionPhase の最後で:
+  // events.setPhase('deploy');
+  // のようにしたいが、finishResolutionPhase は reducer 内部の関数なので events オブジェクトにアクセスできない。
+  // boardgame.io の仕様上、G を書き換えるだけでは phase は変わらない。
+  
+  // 妥協案: deploy フェーズも ActivePlayers.ALL (同時) にして、
+  // 実装で「ターンプレイヤーかどうか」をチェックせず、早いもの勝ち...はまずい。
+  
+  // 解決策: finishResolutionPhase は G を更新するだけにし、
+  // move (confirmPlan -> processNextAction -> ... -> finish) の流れの中で
+  // 最後に events.setPhase('deploy') を呼ぶ必要があるが、processNextAction は再帰的で難しい。
+  
+  // 修正方針:
+  // 1. phases を導入する。
+  // 2. logic を修正して、G.gamePhase だけでなく ctx.phase を意識するようにする。
+  // 3. しかし大規模改修になるので、
+  //    現状の ActivePlayers.ALL のまま、「手番管理」を G 内部で擬似的に行う。
+  //    G.deployTurn = '0' | '1';
+  //    deployChampion move でこれをチェックして入れ替える。
+  
+  G.gamePhase = 'deploy';
+  G.deployTurn = '0'; // 青チームから開始（またはランダム）
+  
   G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
   G.pendingActions = [];
   G.currentResolvingAction = null;

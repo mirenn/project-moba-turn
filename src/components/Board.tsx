@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { BoardProps } from 'boardgame.io/react';
 import { GameState, Team, ChampionInstance, Card, Position, Tower } from '../game/types';
 import { getChampionById } from '../game/champions';
+import { getSpawnPositions } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
 
 type Props = BoardProps<GameState>;
@@ -43,6 +44,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     : null;
 
   const actingChampionIds = G.turnActions[myPlayerID].actions.map(a => a.championId);
+  const isDeployPhase = G.gamePhase === 'deploy';
+  const isMyDeployTurn = isDeployPhase && G.deployTurn === myPlayerID;
 
   // 解決フェーズ用の状態
   const isResolutionPhase = G.gamePhase === 'resolution';
@@ -140,6 +143,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     return targets;
   };
 
+  const spawnablePositions = (isDeployPhase && isMyDeployTurn) ? getSpawnPositions(myPlayerID) : [];
+
   const validMoveTargets = isAwaitingTarget ? getValidMoveTargets() : [];
   const validAttackTargets = isAwaitingTarget ? getValidAttackTargets() : [];
 
@@ -197,6 +202,22 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       return;
     }
 
+    // 配置フェーズ: チャンピオン配置
+    if (isDeployPhase) {
+      if (!selectedChampionId) return;
+      if (!isMyDeployTurn) return;
+
+      // 配置可能かチェック
+      const isSpawnable = spawnablePositions.some(p => p.x === x && p.y === y);
+      const { champion, tower } = getCellContent(x, y); // 既に何かいればNG
+
+      if (isSpawnable && !champion && !tower) {
+        moves.deployChampion(selectedChampionId, x, y);
+        setSelectedChampionId(null);
+      }
+      return;
+    }
+
     // 計画フェーズ: チャンピオン選択
     if (G.gamePhase === 'planning') {
       const { champion } = getCellContent(x, y);
@@ -207,6 +228,14 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           setSelectedChampionId(champion.id);
         }
       }
+    }
+
+    // 配置フェーズ: 配置するチャンピオンをベンチから選択
+    if (isDeployPhase) {
+      // ベンチのチャンピオンをクリックした場合
+      const { champion } = getCellContent(x, y);
+      // ボード上にはいないはずだが、もしクリックできたら...いや、ベンチは別コンポーネント
+      // ここはボード上のセルクリックなので、配置フェーズでは配置以外なにもしない
     }
   };
 
@@ -268,6 +297,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           {G.gamePhase === 'planning' ? '計画フェーズ' :
             G.gamePhase === 'resolution' ? '解決フェーズ' : '配置フェーズ'}
         </div>
+        {isDeployPhase && (
+          <div className="text-yellow-400 font-bold ml-2">
+            {isMyDeployTurn ? 'あなたの配置番です' : '相手の配置番です'}
+          </div>
+        )}
       </div>
 
       {/* 解決フェーズ: ターゲット選択UI */}
@@ -314,8 +348,15 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                 key={champion.id}
                 className={`p-2 rounded border ${champion.knockoutTurnsRemaining > 0
                   ? 'border-red-800 bg-red-950 opacity-50'
-                  : 'border-slate-600 bg-slate-800'
+                  : selectedChampionId === champion.id
+                    ? 'border-yellow-400 bg-yellow-900/50 cursor-pointer ring-2 ring-yellow-400'
+                    : 'border-slate-600 bg-slate-800 cursor-pointer hover:bg-slate-700'
                   }`}
+                onClick={() => {
+                  if (isDeployPhase && isMyDeployTurn && champion.pos === null) {
+                    setSelectedChampionId(champion.id);
+                  }
+                }}
               >
                 <div className={`text-xs font-bold ${typeConfig.color}`}>
                   {def?.nameJa || champion.definitionId}
@@ -323,6 +364,9 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                 <div className="text-xs text-slate-400">
                   HP: {champion.currentHp}/{champion.maxHp}
                 </div>
+                {isDeployPhase && isMyDeployTurn && champion.pos === null && (
+                  <div className="text-xs text-yellow-400 font-bold mt-1">選択して配置</div>
+                )}
                 {champion.knockoutTurnsRemaining > 0 && (
                   <div className="text-xs text-red-400">
                     復活まで {champion.knockoutTurnsRemaining} ターン
@@ -389,12 +433,17 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               const isAttackTarget = validAttackTargets.some(t => t.pos && t.pos.x === x && t.pos.y === y);
               const isResolvingChamp = resolvingChampion?.id === champion?.id;
 
+              // 配置フェーズのハイライト
+              const isSpawnable = spawnablePositions.some(p => p.x === x && p.y === y);
+
               let bgClass = 'bg-slate-700 hover:bg-slate-600';
               if (isSelected) bgClass = 'bg-yellow-900 ring-2 ring-yellow-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
               if (isMoveTarget) bgClass = 'bg-green-700/50 ring-2 ring-green-400 cursor-pointer';
               if (isAttackTarget) bgClass = 'bg-red-700/50 ring-2 ring-red-400 cursor-pointer';
               if (isResolvingChamp) bgClass = 'bg-orange-800 ring-2 ring-orange-400';
+
+              if (isSpawnable && selectedChampionId) bgClass = 'bg-blue-700/50 ring-2 ring-blue-400 cursor-pointer';
 
               return (
                 <div

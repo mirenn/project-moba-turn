@@ -127,6 +127,9 @@ export interface GameState {
   pendingActions: PendingAction[];  // 解決待ち行動キュー（優先度順）
   currentResolvingAction: PendingAction | null; // 現在解決中の行動
   awaitingTargetSelection: boolean; // プレイヤーのターゲット選択待ちかどうか
+  
+  // 配置フェーズ用
+  deployTurn?: Team; // 現在配置をおこなうチーム
 }
 
 // 旧型との互換性のため（移行期間中）
