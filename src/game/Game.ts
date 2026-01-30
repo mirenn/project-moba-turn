@@ -15,6 +15,7 @@ import {
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
+import { selectCPUActions, selectCPUTarget, selectCPUDeployPosition } from './cpuAI';
 
 const BOARD_SIZE = 9;
 const TURNS_PER_PHASE = 4;
@@ -140,8 +141,8 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
 }
 
 /**
- * CPUの自動配置
- * 配置可能な位置から空いているマスを見つけて、まだ配置されていないチャンピオンを配置する
+ * CPUの自動配置（新AI使用）
+ * 勝利マスに近い位置を優先して配置
  */
 function autoCPUDeploy(G: GameState): void {
   const cpuTeam: Team = '1';
@@ -158,21 +159,12 @@ function autoCPUDeploy(G: GameState): void {
   const deployedCount = cpuPlayer.champions.filter(c => c.pos !== null).length;
   if (deployedCount >= 3) return;
   
-  // 配置可能位置を取得
-  const spawnPositions = getSpawnPositions(cpuTeam);
-  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+  // 新AIを使って最適な配置位置を選択
+  const bestPos = selectCPUDeployPosition(G, undeployedChampion, cpuTeam);
   
-  // 空いている位置を探す
-  for (const pos of spawnPositions) {
-    const isOccupied = allChampions.some(c => c.pos?.x === pos.x && c.pos?.y === pos.y);
-    const isTowerPos = G.towers.some(t => t.pos.x === pos.x && t.pos.y === pos.y);
-    
-    if (!isOccupied && !isTowerPos) {
-      // 配置実行
-      undeployedChampion.pos = { x: pos.x, y: pos.y };
-      G.turnLog.push(`${getChampionDisplayName(undeployedChampion)} を (${pos.x}, ${pos.y}) に配置しました`);
-      return;
-    }
+  if (bestPos) {
+    undeployedChampion.pos = { x: bestPos.x, y: bestPos.y };
+    G.turnLog.push(`${getChampionDisplayName(undeployedChampion)} を (${bestPos.x}, ${bestPos.y}) に配置しました`);
   }
 }
 
@@ -265,8 +257,9 @@ const commonMoves = {
       if (G.gamePhase !== 'planning') return;
       if (G.turnActions['0'].actions.length < 2) return;
       
-      // CPUの行動を自動選択
-      autoSelectCPUActions(G, '1', random);
+      // CPUの行動を自動選択（新AI）
+      const cpuActions = selectCPUActions(G, '1');
+      G.turnActions['1'].actions = cpuActions;
       
       // 全行動を優先度順にソート
       const allActions: PendingAction[] = [];
@@ -307,30 +300,73 @@ const commonMoves = {
       { G, random }: { G: GameState; random: any },
       targetPos?: Position,
       targetChampionId?: string,
-      targetTowerId?: string
+      targetTowerId?: string,
+      skipAttack?: boolean
     ) => {
       if (G.gamePhase !== 'resolution') return;
       if (!G.currentResolvingAction) return;
       if (!G.awaitingTargetSelection) return;
       
       const { action, team } = G.currentResolvingAction;
-      
+      const champion = G.players[team].champions.find(c => c.id === action.championId);
+      if (!champion) return;
+
       // ガードの場合はターゲット不要
       if ('discardCardIds' in action) {
         resolveGuardAction(G, action, team);
-      } else {
-        // カードアクションを実行
-        action.targetPos = targetPos;
-        action.targetChampionId = targetChampionId;
-        action.targetTowerId = targetTowerId;
-        resolveCardAction(G, action, team, random);
+        G.awaitingTargetSelection = false;
+        G.currentResolvingAction = null;
+        processNextAction(G, random);
+        return;
       }
-      
-      G.awaitingTargetSelection = false;
-      G.currentResolvingAction = null;
-      
-      // 次の行動へ
-      processNextAction(G, random);
+
+      const cardAction = action as CardAction;
+
+      // 入力を更新 (undefinedでない場合のみ上書き)
+      if (targetPos) cardAction.targetPos = targetPos;
+      if (targetChampionId) cardAction.targetChampionId = targetChampionId;
+      if (targetTowerId) cardAction.targetTowerId = targetTowerId;
+
+      // 代替アクション以外でカード情報を取得
+      const card = !cardAction.isAlternativeMove 
+        ? champion.hand.find(c => c.id === cardAction.cardId) 
+        : null;
+
+      // 解決の可否を判定
+      let readyToResolve = true;
+
+      if (cardAction.isAlternativeMove) {
+        // 代替アクション: 移動先が必要
+        if (!cardAction.targetPos) readyToResolve = false;
+      } else if (card) {
+        // カードアクション
+        
+        // 1. 移動がある場合、移動先が必要
+        if (card.move > 0 && !cardAction.targetPos) {
+          readyToResolve = false;
+        }
+
+        // 2. 攻撃がある場合、ターゲット情報が必要 (または攻撃スキップ)
+        // ただし、moveのみのカードや、power=0のカードは攻撃ターゲット不要
+        if (card.power > 0 && !skipAttack) {
+          // ターゲットが未指定なら未完了とみなす
+          // (攻撃可能な対象がいない場合などは skipAttack=true をクライアントから送る想定)
+          if (!cardAction.targetChampionId && !cardAction.targetTowerId) {
+            readyToResolve = false;
+          }
+        }
+      }
+
+      // すべての情報が揃ったら解決
+      if (readyToResolve) {
+        resolveCardAction(G, cardAction, team, random);
+        G.awaitingTargetSelection = false;
+        G.currentResolvingAction = null;
+        processNextAction(G, random);
+      } else {
+        // まだ情報が足りない場合、ステートを更新して待機継続
+        console.log('Waiting for more targets...', cardAction);
+      }
     },
     
     // 解決フェーズ: スキップ（移動・攻撃しない）
@@ -567,12 +603,13 @@ function processNextAction(G: GameState, random: any) {
     return;
   }
   
-  // CPUの行動: 自動ターゲット選択
+  // CPUの行動: 自動ターゲット選択（新AI）
   const card = champion.hand.find(c => c.id === action.cardId);
   if (card) {
-    const { targetPos, targetChampionId } = autoSelectTarget(G, champion, card, team);
+    const { targetPos, targetChampionId, targetTowerId } = selectCPUTarget(G, champion, card, team);
     action.targetPos = targetPos;
     action.targetChampionId = targetChampionId;
+    action.targetTowerId = targetTowerId;
     resolveCardAction(G, action, team, random);
   }
   
@@ -619,7 +656,7 @@ function resolveCardAction(
     if (action.targetPos) {
       const dx = action.targetPos.x - champion.pos.x;
       const dy = action.targetPos.y - champion.pos.y;
-      const isOrthogonal = (Math.abs(dx) === 1 && dy === 0) || (dx === 0 && Math.abs(dy) === 1);
+      const isOrthogonal = (Math.abs(dx) <= 1 && dy === 0) || (dx === 0 && Math.abs(dy) <= 1);
       
       if (isOrthogonal) {
         const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
@@ -828,96 +865,7 @@ function resolveCardAction(
   champion.usedCards.push(card);
 }
 
-/**
- * CPUのターゲット自動選択
- */
-function autoSelectTarget(
-  G: GameState,
-  champion: ChampionInstance,
-  card: Card,
-  team: Team
-): { targetPos?: Position; targetChampionId?: string } {
-  const enemyTeam = team === '0' ? '1' : '0';
-  const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
-  
-  // 最も近い敵を見つける
-  let closestEnemy: ChampionInstance | null = null;
-  let closestDist = Infinity;
-  
-  if (champion.pos) {
-    for (const enemy of enemies) {
-      if (!enemy.pos) continue;
-      const dist = getDistance(champion.pos, enemy.pos);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestEnemy = enemy;
-      }
-    }
-  }
-  
-  let targetPos: Position | undefined;
-  let targetChampionId: string | undefined;
-  
-  // 移動先を決定
-  if (card.move > 0 && champion.pos) {
-    if (closestEnemy?.pos) {
-      targetPos = getMoveTowardsTarget(champion.pos, closestEnemy.pos, card.move, G, champion.id);
-    } else {
-      const enemyBase = team === '0' ? { x: 8, y: 0 } : { x: 0, y: 8 };
-      targetPos = getMoveTowardsTarget(champion.pos, enemyBase, card.move, G, champion.id);
-    }
-  }
-  
-  // 攻撃対象を決定
-  if (card.power > 0 && closestEnemy) {
-    targetChampionId = closestEnemy.id;
-  }
-  
-  return { targetPos, targetChampionId };
-}
 
-/**
- * 目標に向かって移動する位置を計算
- */
-function getMoveTowardsTarget(
-  from: Position, 
-  to: Position, 
-  maxMove: number,
-  G: GameState,
-  selfId: string
-): Position {
-  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-  
-  let bestPos = from;
-  let bestDist = getDistance(from, to);
-  
-  for (let mx = -maxMove; mx <= maxMove; mx++) {
-    for (let my = -maxMove; my <= maxMove; my++) {
-      if (Math.abs(mx) + Math.abs(my) > maxMove) continue;
-      if (mx === 0 && my === 0) continue;
-      
-      const newX = from.x + mx;
-      const newY = from.y + my;
-      
-      if (newX < 0 || newX >= BOARD_SIZE || newY < 0 || newY >= BOARD_SIZE) continue;
-      
-      const isOccupied = allChampions.some(c => 
-        c.id !== selfId && c.pos?.x === newX && c.pos?.y === newY
-      );
-      const isTowerPos = G.towers.some(t => t.pos.x === newX && t.pos.y === newY);
-      
-      if (isOccupied || isTowerPos) continue;
-      
-      const distToTarget = getDistance({ x: newX, y: newY }, to);
-      if (distToTarget < bestDist) {
-        bestDist = distToTarget;
-        bestPos = { x: newX, y: newY };
-      }
-    }
-  }
-  
-  return bestPos;
-}
 
 /**
  * 配置が必要かどうかをチェック
@@ -1053,48 +1001,6 @@ function refillCards(G: GameState) {
     }
   }
   G.turnLog.push('全チャンピオンのカードが補充された');
-}
-
-function autoSelectCPUActions(G: GameState, cpuTeam: Team, random: any) {
-  const playerState = G.players[cpuTeam];
-  const currentActions = G.turnActions[cpuTeam].actions;
-  
-  if (currentActions.length >= 2) return;
-  
-  const actingChampionIds = currentActions.map(a => a.championId);
-  const availableChampions = playerState.champions.filter(
-    c => c.pos !== null && !actingChampionIds.includes(c.id) && c.hand.length > 0
-  );
-  
-  const actionsNeeded = 2 - currentActions.length;
-  
-  for (let i = 0; i < actionsNeeded && i < availableChampions.length; i++) {
-    const champion = availableChampions[i];
-    
-    const attackCards = champion.hand.filter(c => c.power > 0 && !c.isSwap);
-    const moveCards = champion.hand.filter(c => c.move > 0 && !c.isSwap);
-    const otherCards = champion.hand.filter(c => !c.isSwap);
-    
-    let selectedCard;
-    
-    if (attackCards.length > 0 && random.Number() < 0.5) {
-      selectedCard = attackCards[Math.floor(random.Number() * attackCards.length)];
-    } else if (moveCards.length > 0 && random.Number() < 0.3) {
-      selectedCard = moveCards[Math.floor(random.Number() * moveCards.length)];
-    } else if (otherCards.length > 0) {
-      selectedCard = otherCards[Math.floor(random.Number() * otherCards.length)];
-    } else {
-      selectedCard = champion.hand[0];
-    }
-    
-    if (selectedCard) {
-      const action: CardAction = {
-        championId: champion.id,
-        cardId: selectedCard.id,
-      };
-      G.turnActions[cpuTeam].actions.push(action);
-    }
-  }
 }
 
 function getChampionDisplayName(champion: ChampionInstance): string {
