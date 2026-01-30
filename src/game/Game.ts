@@ -139,6 +139,44 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
   };
 }
 
+/**
+ * CPUの自動配置
+ * 配置可能な位置から空いているマスを見つけて、まだ配置されていないチャンピオンを配置する
+ */
+function autoCPUDeploy(G: GameState): void {
+  const cpuTeam: Team = '1';
+  const cpuPlayer = G.players[cpuTeam];
+  
+  // まだ配置されていないチャンピオン（ノックアウトされていない）
+  const undeployedChampion = cpuPlayer.champions.find(c => 
+    c.pos === null && c.knockoutTurnsRemaining === 0
+  );
+  
+  if (!undeployedChampion) return; // 配置可能なチャンピオンがいない
+  
+  // 既にフィールドに3体いる場合は配置しない
+  const deployedCount = cpuPlayer.champions.filter(c => c.pos !== null).length;
+  if (deployedCount >= 3) return;
+  
+  // 配置可能位置を取得
+  const spawnPositions = getSpawnPositions(cpuTeam);
+  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+  
+  // 空いている位置を探す
+  for (const pos of spawnPositions) {
+    const isOccupied = allChampions.some(c => c.pos?.x === pos.x && c.pos?.y === pos.y);
+    const isTowerPos = G.towers.some(t => t.pos.x === pos.x && t.pos.y === pos.y);
+    
+    if (!isOccupied && !isTowerPos) {
+      // 配置実行
+      undeployedChampion.pos = { x: pos.x, y: pos.y };
+      G.turnLog.push(`${getChampionDisplayName(undeployedChampion)} を (${pos.x}, ${pos.y}) に配置しました`);
+      return;
+    }
+  }
+}
+
+
 const ELEMENT_TYPES: ElementType[] = [
   'normal', 'fire', 'water', 'electric', 'grass', 'ice', 'fighting', 'poison', 'ground', 
   'flying', 'psychic', 'bug', 'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy'
@@ -357,7 +395,16 @@ const commonMoves = {
       G.turnLog.push(`${getChampionDisplayName(champion)} を (${x}, ${y}) に配置しました`);
       
       // 手番を交代
-      G.deployTurn = G.deployTurn === '0' ? '1' : '0';
+      const nextTurn = G.deployTurn === '0' ? '1' : '0';
+      G.deployTurn = nextTurn;
+      
+      // CPUのターン('1')なら自動配置
+      if (nextTurn === '1') {
+        autoCPUDeploy(G);
+        // CPUが配置したら再度プレイヤーの番に戻す
+        G.deployTurn = '0';
+      }
+      
       events.endTurn({ next: G.deployTurn });
     },
 };
@@ -441,9 +488,7 @@ export const LoLBoardGame = {
     },
     main: {
       moves: {
-      moves: {
         ...commonMoves
-      }
       }
     }
   },
