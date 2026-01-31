@@ -24,27 +24,50 @@ const BENCH_RECOVERY_PERCENT = 0.15;
 const GUARD_DAMAGE_REDUCTION = 1 / 3;
 const CHAMPIONS_ON_FIELD = 3;
 
-// 勝利マス（ネクサス）の定義
-function getVictorySquares(team: Team): Position[] {
-  // team '0' はボード右上のタワーの奥を目指す
-  // team '1' はボード左下のタワーの奥を目指す
+// 勝利マス（タワーの後ろ）の定義
+// 各チームの勝利マスは敵タワーの後ろに位置する
+// タワーが破壊されるまで勝利判定は発動しない
+function getVictorySquaresForTeam(team: Team): { pos: Position; behindTowerId: string }[] {
+  // team '0' は右側（Team 1）のタワーの後ろを目指す
+  // team '1' は左側（Team 0）のタワーの後ろを目指す
   if (team === '0') {
-    return [{ x: 8, y: 0 }]; // チーム0の勝利マス（相手陣地）
+    return [
+      { pos: { x: 8, y: 4 }, behindTowerId: 'tower-1-1' },  // (7,4)の後ろ
+      { pos: { x: 7, y: 2 }, behindTowerId: 'tower-1-2' },  // (6,2)の後ろ
+      { pos: { x: 7, y: 6 }, behindTowerId: 'tower-1-3' },  // (6,6)の後ろ
+    ];
   } else {
-    return [{ x: 0, y: 8 }]; // チーム1の勝利マス（相手陣地）
+    return [
+      { pos: { x: 0, y: 4 }, behindTowerId: 'tower-0-1' },  // (1,4)の後ろ
+      { pos: { x: 1, y: 2 }, behindTowerId: 'tower-0-2' },  // (2,2)の後ろ
+      { pos: { x: 1, y: 6 }, behindTowerId: 'tower-0-3' },  // (2,6)の後ろ
+    ];
   }
 }
 
-// 指定位置が勝利マスかどうかをチェック
-function isVictorySquare(pos: Position, forTeam: Team): boolean {
-  const victorySquares = getVictorySquares(forTeam);
-  return victorySquares.some(vs => vs.x === pos.x && vs.y === pos.y);
+// 勝利マスの位置リスト（タワー破壊状況は考慮しない）
+function getVictorySquares(team: Team): Position[] {
+  return getVictorySquaresForTeam(team).map(vs => vs.pos);
+}
+
+// 指定位置が勝利マスかどうかをチェック（タワー破壊済みの場合のみtrue）
+function isVictorySquare(pos: Position, forTeam: Team, towers: Tower[]): boolean {
+  const victorySquares = getVictorySquaresForTeam(forTeam);
+  for (const vs of victorySquares) {
+    if (vs.pos.x === pos.x && vs.pos.y === pos.y) {
+      // 対応するタワーが破壊されているかチェック
+      const towerExists = towers.some(t => t.id === vs.behindTowerId);
+      return !towerExists; // タワーが存在しなければ勝利マスとして有効
+    }
+  }
+  return false;
 }
 
 // 自陣の勝利マス（敵が目指すマス）かどうかをチェック
 function isOwnVictorySquare(pos: Position, team: Team): boolean {
   const enemyTeam = team === '0' ? '1' : '0';
-  return isVictorySquare(pos, enemyTeam);
+  const enemyVictorySquares = getVictorySquares(enemyTeam);
+  return enemyVictorySquares.some(vs => vs.x === pos.x && vs.y === pos.y);
 }
 
 function createTower(id: string, team: Team, x: number, y: number, type: ElementType): Tower {
@@ -87,34 +110,30 @@ function createChampionInstance(
 }
 
 export function getSpawnPositions(team: Team): Position[] {
-  // タワー周辺のスポーン可能マスを定義
+  // タワー周辺のスポーン可能マスを定義（左右配置）
   // タワー位置:
-  // Team 0: (0,4), (2,6), (4,8)
-  // Team 1: (8,4), (6,2), (4,0)
+  // Team 0 (左側): (1,4), (2,2), (2,6)
+  // Team 1 (右側): (7,4), (6,2), (6,6)
   
   if (team === '0') {
-    // 青チーム: 左上〜真ん中にかけてのタワー周辺
+    // 青チーム: 左側のタワー周辺
     return [
-      // around (0,4)
-      { x: 0, y: 3 }, { x: 1, y: 3 }, { x: 1, y: 4 }, { x: 1, y: 5 }, { x: 0, y: 5 },
+      // around (1,4)
+      { x: 0, y: 3 }, { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 1, y: 3 }, { x: 1, y: 5 }, { x: 2, y: 4 },
+      // around (2,2)
+      { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 1 }, { x: 3, y: 2 }, { x: 2, y: 3 },
       // around (2,6)
-      { x: 1, y: 6 }, { x: 2, y: 5 }, { x: 3, y: 6 }, { x: 2, y: 7 },
-      // around (4,8)
-      { x: 3, y: 8 }, { x: 4, y: 7 }, { x: 5, y: 8 }, 
-      // backups if needed
-      { x: 3, y: 7 }, { x: 1, y: 7 }, { x: 0, y: 2 }, { x: 2, y: 4 }
+      { x: 1, y: 6 }, { x: 1, y: 7 }, { x: 2, y: 5 }, { x: 2, y: 7 }, { x: 3, y: 6 },
     ];
   } else {
-    // 赤チーム: 右下〜真ん中にかけてのタワー周辺
+    // 赤チーム: 右側のタワー周辺
     return [
-      // around (8,4)
-      { x: 8, y: 3 }, { x: 7, y: 3 }, { x: 7, y: 4 }, { x: 7, y: 5 }, { x: 8, y: 5 },
+      // around (7,4)
+      { x: 8, y: 3 }, { x: 8, y: 4 }, { x: 8, y: 5 }, { x: 7, y: 3 }, { x: 7, y: 5 }, { x: 6, y: 4 },
       // around (6,2)
-      { x: 7, y: 2 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 6, y: 3 },
-      // around (4,0)
-      { x: 5, y: 0 }, { x: 4, y: 1 }, { x: 3, y: 0 },
-      // backups
-      { x: 5, y: 1 }, { x: 7, y: 1 }, { x: 8, y: 6 }, { x: 6, y: 4 }
+      { x: 7, y: 1 }, { x: 7, y: 2 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 6, y: 3 },
+      // around (6,6)
+      { x: 7, y: 6 }, { x: 7, y: 7 }, { x: 6, y: 5 }, { x: 6, y: 7 }, { x: 5, y: 6 },
     ];
   }
 }
@@ -482,13 +501,13 @@ export const LoLBoardGame = {
     // タイプをランダムに決定するヘルパー
     const getRandomType = () => ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
 
-    towers.push(createTower('tower-0-1', '0', 0, 4, getRandomType()));
-    towers.push(createTower('tower-0-2', '0', 2, 6, getRandomType()));
-    towers.push(createTower('tower-0-3', '0', 4, 8, getRandomType()));
+    towers.push(createTower('tower-0-1', '0', 1, 4, getRandomType())); // 中央
+    towers.push(createTower('tower-0-2', '0', 2, 2, getRandomType())); // 上側
+    towers.push(createTower('tower-0-3', '0', 2, 6, getRandomType())); // 下側
 
-    towers.push(createTower('tower-1-1', '1', 8, 4, getRandomType()));
-    towers.push(createTower('tower-1-2', '1', 6, 2, getRandomType()));
-    towers.push(createTower('tower-1-3', '1', 4, 0, getRandomType()));
+    towers.push(createTower('tower-1-1', '1', 7, 4, getRandomType())); // 中央
+    towers.push(createTower('tower-1-2', '1', 6, 2, getRandomType())); // 上側
+    towers.push(createTower('tower-1-3', '1', 6, 6, getRandomType())); // 下側
 
     const team0Champions = ['gekogekoga', 'enshishi', 'raichou', 'kidouba'];
     const team1Champions = ['kidouba', 'raichou', 'enshishi', 'gekogekoga'];
@@ -702,7 +721,7 @@ function resolveCardAction(
           G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した（代替アクション）`);
           
           // 勝利マス到達チェック
-          if (isVictorySquare(action.targetPos, team)) {
+          if (isVictorySquare(action.targetPos, team, G.towers)) {
             G.winner = team;
             G.turnLog.push(`★★★ ${championName} が勝利マスに到達！チーム${team}の勝利！ ★★★`);
           }
@@ -740,7 +759,7 @@ function resolveCardAction(
         G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
         
         // 勝利マス到達チェック
-        if (isVictorySquare(action.targetPos, team)) {
+        if (isVictorySquare(action.targetPos, team, G.towers)) {
           G.winner = team;
           G.turnLog.push(`★★★ ${championName} が勝利マスに到達！チーム${team}の勝利！ ★★★`);
         }

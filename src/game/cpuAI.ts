@@ -64,37 +64,45 @@ function getDistance(p1: Position, p2: Position): number {
 }
 
 function getVictorySquares(team: Team): Position[] {
+  // 左右配置: 各チームは敵タワーの後ろのマスを目指す
   if (team === '0') {
-    // 青チーム: 右上エリアが勝利マス
+    // 青チーム: 右側（Team 1のタワーの後ろ）を目指す
     return [
-      { x: 8, y: 0 },
-      { x: 8, y: 1 },
-      { x: 7, y: 0 },
+      { x: 8, y: 4 },  // (7,4)の後ろ
+      { x: 7, y: 2 },  // (6,2)の後ろ
+      { x: 7, y: 6 },  // (6,6)の後ろ
     ];
   } else {
-    // 赤チーム: 左下エリアが勝利マス
+    // 赤チーム: 左側（Team 0のタワーの後ろ）を目指す
     return [
-      { x: 0, y: 8 },
-      { x: 0, y: 7 },
-      { x: 1, y: 8 },
+      { x: 0, y: 4 },  // (1,4)の後ろ
+      { x: 1, y: 2 },  // (2,2)の後ろ
+      { x: 1, y: 6 },  // (2,6)の後ろ
     ];
   }
 }
 
 function getSpawnPositions(team: Team): Position[] {
+  // 左右配置: タワー周辺のスポーン位置
+  // Team 0 (左側): (1,4), (2,2), (2,6)
+  // Team 1 (右側): (7,4), (6,2), (6,6)
   if (team === '0') {
     return [
-      { x: 0, y: 3 }, { x: 0, y: 5 }, { x: 1, y: 4 },
-      { x: 1, y: 5 }, { x: 1, y: 6 }, { x: 2, y: 5 },
-      { x: 2, y: 7 }, { x: 3, y: 6 }, { x: 3, y: 7 },
-      { x: 3, y: 8 }, { x: 4, y: 7 }, { x: 5, y: 8 },
+      // around (1,4)
+      { x: 0, y: 3 }, { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 1, y: 3 }, { x: 1, y: 5 }, { x: 2, y: 4 },
+      // around (2,2)
+      { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 1 }, { x: 3, y: 2 }, { x: 2, y: 3 },
+      // around (2,6)
+      { x: 1, y: 6 }, { x: 1, y: 7 }, { x: 2, y: 5 }, { x: 2, y: 7 }, { x: 3, y: 6 },
     ];
   } else {
     return [
-      { x: 8, y: 3 }, { x: 8, y: 5 }, { x: 7, y: 4 },
-      { x: 7, y: 3 }, { x: 7, y: 2 }, { x: 6, y: 3 },
-      { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 5, y: 1 },
-      { x: 5, y: 0 }, { x: 4, y: 1 }, { x: 3, y: 0 },
+      // around (7,4)
+      { x: 8, y: 3 }, { x: 8, y: 4 }, { x: 8, y: 5 }, { x: 7, y: 3 }, { x: 7, y: 5 }, { x: 6, y: 4 },
+      // around (6,2)
+      { x: 7, y: 1 }, { x: 7, y: 2 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 6, y: 3 },
+      // around (6,6)
+      { x: 7, y: 6 }, { x: 7, y: 7 }, { x: 6, y: 5 }, { x: 6, y: 7 }, { x: 5, y: 6 },
     ];
   }
 }
@@ -315,8 +323,8 @@ function evaluatePositioning(
     }
   }
   
-  // 敵陣に近づく動きを評価
-  const enemyBase = team === '0' ? { x: 8, y: 0 } : { x: 0, y: 8 };
+  // 敵陣に近づく動きを評価（左右配置）
+  const enemyBase = team === '0' ? { x: 8, y: 4 } : { x: 0, y: 4 };
   const currentDist = champion.pos ? getDistance(champion.pos, enemyBase) : 16;
   const newDist = getDistance(action.targetPos, enemyBase);
   
