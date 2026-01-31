@@ -335,24 +335,52 @@ const commonMoves = {
       // 解決の可否を判定
       let readyToResolve = true;
 
+      // 1. 代替アクションの場合：移動先が必須
       if (cardAction.isAlternativeMove) {
-        // 代替アクション: 移動先が必要
         if (!cardAction.targetPos) readyToResolve = false;
-      } else if (card) {
-        // カードアクション
-        
-        // 1. 移動がある場合、移動先が必要
+      } 
+      // 2. カードアクションの場合
+      else if (card) {
+        // A. 移動が必要な場合、移動先チェック
         if (card.move > 0 && !cardAction.targetPos) {
           readyToResolve = false;
         }
 
-        // 2. 攻撃がある場合、ターゲット情報が必要 (または攻撃スキップ)
-        // ただし、moveのみのカードや、power=0のカードは攻撃ターゲット不要
+        // B. 攻撃が必要な場合
+        // 条件: 攻撃力がある AND 攻撃スキップされていない
         if (card.power > 0 && !skipAttack) {
-          // ターゲットが未指定なら未完了とみなす
-          // (攻撃可能な対象がいない場合などは skipAttack=true をクライアントから送る想定)
-          if (!cardAction.targetChampionId && !cardAction.targetTowerId) {
-            readyToResolve = false;
+          // すでにターゲット指定済みならOK
+          if (cardAction.targetChampionId || cardAction.targetTowerId) {
+            // OK
+          } else {
+            // ターゲット未指定の場合、
+            // 「そもそも攻撃可能な対象がいるか」を判定する
+            const effectivePos = cardAction.targetPos || champion.pos;
+            if (!effectivePos) {
+              // 移動先も未定なら判定不能なのでfalse
+               readyToResolve = false;
+            } else {
+              const attackRange = card.move > 0 ? 1 : 2;
+              const enemyTeam = team === '0' ? '1' : '0';
+              
+              // 敵チャンピオンチェック
+              const hasEnemyChampion = G.players[enemyTeam].champions.some(c => 
+                c.pos !== null && getDistance(effectivePos, c.pos) <= attackRange
+              );
+              
+              // 敵タワーチェック
+              const hasEnemyTower = G.towers.some(t => 
+                t.team === enemyTeam && getDistance(effectivePos, t.pos) <= attackRange
+              );
+              
+              if (hasEnemyChampion || hasEnemyTower) {
+                // 対象がいるのに選択されていない -> 待機
+                readyToResolve = false;
+              } else {
+                // 対象がいない -> 攻撃ステップは完了とみなす(スキップ)
+                // 明示的にスキップログを出しても良いが、解決関数内で処理されないだけ
+              }
+            }
           }
         }
       }

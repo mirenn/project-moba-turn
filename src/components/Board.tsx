@@ -121,13 +121,23 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     if (!resolvingChampion || !resolvingChampion.pos || !resolvingCard) return [];
     if (resolvingCard.power <= 0) return [];
 
-    const attackRange = resolvingCard.move > 0 ? 3 : 2; // 移動後を考慮して少し広めに
+    const pendingMovePos = (currentAction?.action as any)?.targetPos;
+    const sourcePos = pendingMovePos || resolvingChampion.pos;
+
+    // 攻撃範囲の決定: 
+    // - 移動ありカード: 移動後は隣接(1)、移動前は予測範囲(3)
+    // - 移動なしカード: 範囲(2)
+    let attackRange = 2;
+    if (resolvingCard.move > 0) {
+      attackRange = pendingMovePos ? 1 : 3;
+    }
+
     const targets: (ChampionInstance | Tower)[] = [];
 
     // 敵チャンピオン
     const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
     enemies.forEach(enemy => {
-      if (enemy.pos && resolvingChampion.pos && getDistance(resolvingChampion.pos, enemy.pos) <= attackRange) {
+      if (enemy.pos && sourcePos && getDistance(sourcePos, enemy.pos) <= attackRange) {
         targets.push(enemy);
       }
     });
@@ -135,7 +145,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     // 敵タワー
     const enemyTowers = G.towers.filter(t => t.team === enemyTeam);
     enemyTowers.forEach(tower => {
-      if (resolvingChampion.pos && getDistance(resolvingChampion.pos, tower.pos) <= attackRange) {
+      if (sourcePos && getDistance(sourcePos, tower.pos) <= attackRange) {
         targets.push(tower);
       }
     });
@@ -163,42 +173,31 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       // 移動先として選択
       const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
       if (isMoveTarget) {
-        // 敵がいれば攻撃対象も設定（移動攻撃）- 単純化のため敵がいるマスへの移動攻撃は一旦チャンピオン優先
-        // ※実際には移動後に射程内の敵を選ぶUIが必要だが、簡易的に「移動先にいる敵」または「移動後に最も近い敵」を選ぶロジックが必要
-        // 現状の実装: 移動先を選択 -> その後攻撃対象を選ぶフローにはなっていない。
-        // （moveとattackがセットになったカードの場合、移動先 = 攻撃位置という簡易実装になっている箇所がある）
-
-        // 移動先に敵がいる場合
-        let targetId = undefined;
-        let targetTowerId = undefined;
-
-        const targetEnemy = validAttackTargets.find(t =>
-          'definitionId' in t && t.pos?.x === x && t.pos?.y === y
-        ) as ChampionInstance | undefined;
-
-        const targetEnemyTower = validAttackTargets.find(t =>
-          !('definitionId' in t) && t.pos.x === x && t.pos.y === y
-        ) as Tower | undefined;
-
-        if (targetEnemy) targetId = targetEnemy.id;
-        else if (targetEnemyTower) targetTowerId = targetEnemyTower.id;
-
-        // moves.selectTarget(targetPos, targetChampionId, targetTowerId)
-        moves.selectTarget({ x, y }, targetId, targetTowerId);
+        // 移動先を選択
+        // 攻撃対象はここでは設定せず、サーバー側の待機ロジックとクライアントの2段階クリックに任せる
+        moves.selectTarget({ x, y }, undefined, undefined);
         return;
       }
 
-      // 攻撃対象として選択（移動なしカードの場合、または射程内への直接攻撃）
-      if (resolvingCard?.move === 0) {
-        if (champion && champion.team === enemyTeam) {
-          moves.selectTarget(undefined, champion.id, undefined);
-          return;
-        }
-        if (tower && tower.team === enemyTeam) {
-          moves.selectTarget(undefined, undefined, tower.id);
-          return;
-        }
+      // 攻撃対象として選択
+      // 移動ありカードの場合でも、移動先決定後(=validAttackTargetsが更新された後)ならここで選択可能
+      const targetEnemy = validAttackTargets.find(t =>
+        'definitionId' in t && t.pos?.x === x && t.pos?.y === y
+      ) as ChampionInstance | undefined;
+
+      const targetEnemyTower = validAttackTargets.find(t =>
+        !('definitionId' in t) && t.pos.x === x && t.pos.y === y
+      ) as Tower | undefined;
+
+      if (targetEnemy) {
+        moves.selectTarget(undefined, targetEnemy.id, undefined);
+        return;
       }
+      if (targetEnemyTower) {
+        moves.selectTarget(undefined, undefined, targetEnemyTower.id);
+        return;
+      }
+
       return;
     }
 
