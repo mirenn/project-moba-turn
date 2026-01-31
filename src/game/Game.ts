@@ -274,7 +274,11 @@ const commonMoves = {
     // 計画確定 → 解決フェーズへ
     confirmPlan: ({ G, random }: { G: GameState; random: any }) => {
       if (G.gamePhase !== 'planning') return;
-      if (G.turnActions['0'].actions.length < 2) return;
+      
+      const activeChampionsCount = G.players['0'].champions.filter(c => c.pos !== null).length;
+      const requiredActions = Math.min(2, activeChampionsCount);
+      
+      if (G.turnActions['0'].actions.length < requiredActions) return;
       
       // CPUの行動を自動選択（新AI）
       const cpuActions = selectCPUActions(G, '1');
