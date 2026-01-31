@@ -31,6 +31,7 @@ function getDistance(p1: Position, p2: Position): number {
 
 export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedChampionId, setSelectedChampionId] = useState<string | null>(null);
+  const [selectedEnemyChampionId, setSelectedEnemyChampionId] = useState<string | null>(null);
 
   const myPlayerID = (playerID || '0') as Team;
   const myPlayerState = G.players[myPlayerID];
@@ -220,11 +221,23 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     // 計画フェーズ: チャンピオン選択
     if (G.gamePhase === 'planning') {
       const { champion } = getCellContent(x, y);
-      if (champion && champion.team === myPlayerID) {
-        if (champion.id === selectedChampionId) {
-          setSelectedChampionId(null);
+      if (champion) {
+        if (champion.team === myPlayerID) {
+          // 自チームのチャンピオンを選択
+          setSelectedEnemyChampionId(null);
+          if (champion.id === selectedChampionId) {
+            setSelectedChampionId(null);
+          } else {
+            setSelectedChampionId(champion.id);
+          }
         } else {
-          setSelectedChampionId(champion.id);
+          // 敵チームのチャンピオンを選択（カード確認用）
+          setSelectedChampionId(null);
+          if (champion.id === selectedEnemyChampionId) {
+            setSelectedEnemyChampionId(null);
+          } else {
+            setSelectedEnemyChampionId(champion.id);
+          }
         }
       }
     }
@@ -425,6 +438,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             Array.from({ length: BOARD_SIZE }).map((_, x) => {
               const { champion, tower } = getCellContent(x, y);
               const isSelected = champion?.id === selectedChampionId;
+              const isSelectedEnemy = champion?.id === selectedEnemyChampionId;
               const isActing = champion && actingChampionIds.includes(champion.id);
 
               // 解決フェーズのハイライト
@@ -437,6 +451,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
               let bgClass = 'bg-slate-700 hover:bg-slate-600';
               if (isSelected) bgClass = 'bg-yellow-900 ring-2 ring-yellow-400';
+              if (isSelectedEnemy) bgClass = 'bg-red-900 ring-2 ring-red-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
               if (isMoveTarget) bgClass = 'bg-green-700/50 ring-2 ring-green-400 cursor-pointer';
               if (isAttackTarget) bgClass = 'bg-red-700/50 ring-2 ring-red-400 cursor-pointer';
@@ -568,10 +583,118 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           )}
 
           {G.gamePhase === 'resolution' && (
-            <div className="text-orange-400 text-sm p-2 bg-orange-900/30 rounded">
-              解決フェーズ中...
-            </div>
+            <>
+              <h3 className="text-sm font-semibold text-orange-400">選択された行動（優先度順）</h3>
+              {G.pendingActions.length > 0 || G.currentResolvingAction ? (
+                <div className="space-y-2">
+                  {/* 現在解決中のアクション */}
+                  {G.currentResolvingAction && (() => {
+                    const action = G.currentResolvingAction;
+                    const champ = G.players[action.team].champions.find(c => c.id === action.championId);
+                    if (!champ) return null;
+                    const isGuard = 'discardCardIds' in action.action;
+                    const card = !isGuard ? champ.hand.find(c => c.id === (action.action as any).cardId) : null;
+                    const isMyTeam = action.team === myPlayerID;
+                    const champDef = getChampionDef(champ);
+                    const typeConfig = card ? getTypeConfig(card.type) : null;
+                    return (
+                      <div className={`p-2 rounded border ${isMyTeam ? 'border-blue-500 bg-blue-900/30' : 'border-red-500 bg-red-900/30'} ring-2 ring-orange-400`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-bold ${isMyTeam ? 'text-blue-300' : 'text-red-300'}`}>
+                            {champDef?.nameJa || champ.definitionId}
+                          </span>
+                          <span className="text-[10px] text-orange-300">▶ 実行中</span>
+                        </div>
+                        {isGuard ? (
+                          <div className="text-xs text-yellow-400 flex items-center gap-1 mt-1">
+                            <Shield size={12} /> ガード
+                          </div>
+                        ) : card && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <div className={`${typeConfig?.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
+                              {typeConfig?.icon}
+                              <span className="text-[10px] text-white">{card.priority}</span>
+                            </div>
+                            <span className="text-xs text-white">{card.nameJa}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {/* 待機中のアクション */}
+                  {G.pendingActions.map((pending, idx) => {
+                    const champ = G.players[pending.team].champions.find(c => c.id === pending.championId);
+                    if (!champ) return null;
+                    const isGuard = 'discardCardIds' in pending.action;
+                    const card = !isGuard ? champ.hand.find(c => c.id === (pending.action as any).cardId) : null;
+                    const isMyTeam = pending.team === myPlayerID;
+                    const champDef = getChampionDef(champ);
+                    const typeConfig = card ? getTypeConfig(card.type) : null;
+                    return (
+                      <div key={idx} className={`p-2 rounded border ${isMyTeam ? 'border-blue-500 bg-blue-900/30' : 'border-red-500 bg-red-900/30'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-bold ${isMyTeam ? 'text-blue-300' : 'text-red-300'}`}>
+                            {champDef?.nameJa || champ.definitionId}
+                          </span>
+                        </div>
+                        {isGuard ? (
+                          <div className="text-xs text-yellow-400 flex items-center gap-1 mt-1">
+                            <Shield size={12} /> ガード
+                          </div>
+                        ) : card && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <div className={`${typeConfig?.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
+                              {typeConfig?.icon}
+                              <span className="text-[10px] text-white">{card.priority}</span>
+                            </div>
+                            <span className="text-xs text-white">{card.nameJa}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-slate-400 text-sm p-2 bg-slate-800 rounded">
+                  すべての行動が完了しました
+                </div>
+              )}
+            </>
           )}
+
+          {/* 計画フェーズ: 敵チャンピオンのカード表示 */}
+          {G.gamePhase === 'planning' && selectedEnemyChampionId && (() => {
+            const enemyChamp = G.players[enemyTeam].champions.find(c => c.id === selectedEnemyChampionId);
+            if (!enemyChamp) return null;
+            const champDef = getChampionDef(enemyChamp);
+            return (
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-red-400">
+                  {champDef?.nameJa || enemyChamp.definitionId} の手札（敵）
+                </h3>
+                <div className="space-y-1 mt-2">
+                  {enemyChamp.hand.map(card => {
+                    const typeConfig = getTypeConfig(card.type);
+                    return (
+                      <div key={card.id} className="p-2 rounded border border-red-800/50 bg-red-950/30">
+                        <div className="flex items-center gap-1">
+                          <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
+                            {typeConfig.icon}
+                            <span className="text-[10px] text-white">{card.priority}</span>
+                          </div>
+                          <span className="text-xs text-red-200 font-bold">{card.nameJa}</span>
+                        </div>
+                        <div className="flex gap-2 text-[10px] text-red-400/80 mt-1">
+                          {card.power > 0 && <span>威力:{card.power}</span>}
+                          {card.move > 0 && <span>移動:{card.move}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
