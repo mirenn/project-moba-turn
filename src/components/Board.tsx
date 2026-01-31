@@ -124,6 +124,18 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     }
   }, [G.damageEvents, G.players, G.towers]);
 
+  // CPUアクションディレイの処理
+  useEffect(() => {
+    if (!G.cpuActionDelay) return;
+
+    // 1秒後にCPUアクションを続行
+    const timer = setTimeout(() => {
+      moves.continueCPUAction();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [G.cpuActionDelay, moves]);
+
   // 移動可能なマスを計算
   const getValidMoveTargets = (): Position[] => {
     if (!resolvingChampion || !resolvingChampion.pos) return [];

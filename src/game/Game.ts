@@ -467,6 +467,27 @@ const commonMoves = {
       processNextAction(G, random);
     },
 
+    // CPUアクション実行（ディレイ後にUIから呼ばれる）
+    continueCPUAction: ({ G, random }: { G: GameState; random: any }) => {
+      if (G.gamePhase !== 'resolution') return;
+      if (!G.cpuActionDelay) return;
+      if (!G.currentResolvingAction) return;
+      
+      const { action, team } = G.currentResolvingAction;
+      
+      // ガードアクションの場合
+      if ('discardCardIds' in action) {
+        resolveGuardAction(G, action, team);
+      } else {
+        // カードアクションの場合（ターゲットは既に設定済み）
+        resolveCardAction(G, action, team, random);
+      }
+      
+      G.cpuActionDelay = false;
+      G.currentResolvingAction = null;
+      processNextAction(G, random);
+    },
+
     // 配置フェーズ: チャンピオンを配置
     deployChampion: (
       { G, playerID, events }: { G: GameState; playerID: string; events: any },
@@ -664,11 +685,19 @@ function processNextAction(G: GameState, random: any) {
     return;
   }
   
-  // ガードアクションは即時実行
+  // ガードアクションの処理
   if ('discardCardIds' in action) {
-    resolveGuardAction(G, action, team);
-    G.currentResolvingAction = null;
-    processNextAction(G, random);
+    if (team === '0') {
+      // プレイヤーのガードは即時実行
+      resolveGuardAction(G, action, team);
+      G.currentResolvingAction = null;
+      processNextAction(G, random);
+    } else {
+      // CPUのガードはディレイ表示
+      G.cpuActionDelay = true;
+      const championForLog = G.players[team].champions.find(c => c.id === action.championId);
+      G.turnLog.push(`[CPU] ${championForLog ? getChampionDisplayName(championForLog) : 'チャンピオン'} がガードを選択...`);
+    }
     return;
   }
   
@@ -680,18 +709,19 @@ function processNextAction(G: GameState, random: any) {
     return;
   }
   
-  // CPUの行動: 自動ターゲット選択（新AI）
+  // CPUの行動: ディレイ表示のためにここで一旦停止
+  // ターゲットを事前に決定してアクションに設定
   const card = champion.hand.find(c => c.id === action.cardId);
   if (card) {
     const { targetPos, targetChampionId, targetTowerId } = selectCPUTarget(G, champion, card, team);
     action.targetPos = targetPos;
     action.targetChampionId = targetChampionId;
     action.targetTowerId = targetTowerId;
-    resolveCardAction(G, action, team, random);
   }
   
-  G.currentResolvingAction = null;
-  processNextAction(G, random);
+  // CPUアクションディレイを設定（UIが続行を呼ぶまで待機）
+  G.cpuActionDelay = true;
+  G.turnLog.push(`[CPU] ${getChampionDisplayName(champion)} が ${card?.nameJa || 'カード'} を使用...`);
 }
 
 /**
