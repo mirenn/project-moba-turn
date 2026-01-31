@@ -113,6 +113,15 @@ export interface PendingAction {
   championId: string;
 }
 
+// ダメージイベント（アニメーション用）
+export interface DamageEvent {
+  id: string;           // ユニークID
+  targetId: string;     // ダメージを受けたユニットのID
+  amount: number;       // ダメージ量
+  effectiveness?: string; // 効果（ばつぐん等）
+  timestamp: number;    // 発生時刻
+}
+
 export interface GameState {
   players: Record<Team, PlayerState>;
   towers: Tower[];
@@ -130,6 +139,10 @@ export interface GameState {
   
   // 配置フェーズ用
   deployTurn?: Team; // 現在配置をおこなうチーム
+  
+  // アニメーション用
+  damageEvents: DamageEvent[];  // ダメージイベントのキュー
+  cpuActionDelay: boolean;      // CPUアクション実行中のディレイ表示
 }
 
 // 旧型との互換性のため（移行期間中）

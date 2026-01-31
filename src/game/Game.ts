@@ -406,6 +406,30 @@ const commonMoves = {
             }
           }
         }
+
+        if (card.isSwap) {
+          if (!cardAction.targetChampionId) {
+             // 交代対象（ベンチ）の指定が必須
+             // ベンチに交代可能なユニットがいるか確認
+             const benchChampions = G.players[team].champions.filter(c => 
+               c.pos === null && c.knockoutTurnsRemaining === 0
+             );
+             
+             if (benchChampions.length > 0) {
+                readyToResolve = false; 
+             } else {
+                // 交代相手がいない場合はそのまま実行（効果不発）
+                readyToResolve = true; 
+             }
+          } else {
+             // 指定されたIDが本当に自軍のベンチか検証
+             const targetChamp = G.players[team].champions.find(c => c.id === cardAction.targetChampionId);
+             if (!targetChamp || targetChamp.pos !== null) {
+                // 不正なターゲット
+                readyToResolve = false; 
+             }
+          }
+        }
       }
 
       // すべての情報が揃ったら解決
@@ -537,6 +561,8 @@ export const LoLBoardGame = {
       pendingActions: [],
       currentResolvingAction: null,
       awaitingTargetSelection: false,
+      damageEvents: [],
+      cpuActionDelay: false,
     };
   },
 
@@ -812,6 +838,15 @@ function resolveCardAction(
           
           target.currentHp -= finalDamage;
           
+          // ダメージイベントを追加（アニメーション用）
+          G.damageEvents.push({
+            id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            targetId: target.id,
+            amount: finalDamage,
+            effectiveness: effectiveness || undefined,
+            timestamp: Date.now(),
+          });
+          
           let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
@@ -875,6 +910,15 @@ function resolveCardAction(
           
           target.hp -= finalDamage;
           
+          // ダメージイベントを追加（アニメーション用）
+          G.damageEvents.push({
+            id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            targetId: target.id,
+            amount: finalDamage,
+            effectiveness: effectiveness || undefined,
+            timestamp: Date.now(),
+          });
+          
           let logMsg = `${championName} の ${card.nameJa}！ タワー(${target.id}) に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
@@ -900,14 +944,35 @@ function resolveCardAction(
   
   // 交代処理
   if (card.isSwap || card.effectFn === 'uturn') {
-    const benchChampion = G.players[team].champions.find(c => 
-      c.pos === null && c.knockoutTurnsRemaining === 0
-    );
+    let benchChampion: ChampionInstance | undefined;
+    
+    if (card.isSwap && action.targetChampionId) {
+      // 指定されたベンチのチャンピオンと交代
+      benchChampion = G.players[team].champions.find(c => c.id === action.targetChampionId);
+      
+      // バリデーション (念のため)
+      if (benchChampion && (benchChampion.pos !== null || benchChampion.knockoutTurnsRemaining > 0)) {
+        benchChampion = undefined; 
+      }
+    } 
+    
+    // ターゲット指定がない（とんぼがえり等、または自動選択フォールバック）場合
+    if (!benchChampion) {
+       benchChampion = G.players[team].champions.find(c => 
+        c.pos === null && c.knockoutTurnsRemaining === 0
+      );
+    }
     
     if (benchChampion) {
+      // 交代実行
       benchChampion.pos = { ...champion.pos };
       champion.pos = null;
       G.turnLog.push(`${championName} と ${getChampionDisplayName(benchChampion)} が交代した！`);
+      
+      // 交代後のユニットは行動済み扱いにはならない（次のフェイズで行動可能だが、
+      // このターン中は行動できない。仕様次第だが、ここでは単に配置が変わるだけ）
+    } else {
+      G.turnLog.push(`${championName} は交代しようとしたが、控えがいなかった！`);
     }
   }
   

@@ -1,7 +1,7 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
-import { GameState, Team, ChampionInstance, Card, Position, Tower } from '../game/types';
+import { GameState, Team, ChampionInstance, Card, Position, Tower, DamageEvent } from '../game/types';
 import { getChampionById } from '../game/champions';
 import { getSpawnPositions } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
@@ -29,9 +29,17 @@ function getDistance(p1: Position, p2: Position): number {
   return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
 }
 
+// ダメージポップアップ用の型
+interface VisibleDamageEvent extends DamageEvent {
+  x: number;
+  y: number;
+}
+
 export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedChampionId, setSelectedChampionId] = useState<string | null>(null);
   const [selectedEnemyChampionId, setSelectedEnemyChampionId] = useState<string | null>(null);
+  const [visibleDamageEvents, setVisibleDamageEvents] = useState<VisibleDamageEvent[]>([]);
+  const processedEventIdsRef = useRef<Set<string>>(new Set());
 
   const myPlayerID = (playerID || '0') as Team;
   const myPlayerState = G.players[myPlayerID];
@@ -65,6 +73,56 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const isAlternativeMove = currentAction && !('discardCardIds' in currentAction.action)
     ? (currentAction.action as any).isAlternativeMove
     : false;
+
+  // ダメージイベントの処理（アニメーション用）
+  useEffect(() => {
+    if (!G.damageEvents || G.damageEvents.length === 0) return;
+
+    // 新しいダメージイベントを処理
+    const newEvents: VisibleDamageEvent[] = [];
+
+    for (const event of G.damageEvents) {
+      // 既に処理済みのイベントはスキップ
+      if (processedEventIdsRef.current.has(event.id)) continue;
+      processedEventIdsRef.current.add(event.id);
+
+      // ターゲットの位置を取得
+      let targetPos: Position | null = null;
+
+      // チャンピオンを検索
+      const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+      const champion = allChampions.find(c => c.id === event.targetId);
+      if (champion?.pos) {
+        targetPos = champion.pos;
+      }
+
+      // タワーを検索
+      if (!targetPos) {
+        const tower = G.towers.find(t => t.id === event.targetId);
+        if (tower) {
+          targetPos = tower.pos;
+        }
+      }
+
+      if (targetPos) {
+        newEvents.push({
+          ...event,
+          x: targetPos.x,
+          y: targetPos.y,
+        });
+      }
+    }
+
+    if (newEvents.length > 0) {
+      setVisibleDamageEvents(prev => [...prev, ...newEvents]);
+
+      // 1秒後にイベントを削除
+      const eventIds = newEvents.map(e => e.id);
+      setTimeout(() => {
+        setVisibleDamageEvents(prev => prev.filter(e => !eventIds.includes(e.id)));
+      }, 1000);
+    }
+  }, [G.damageEvents, G.players, G.towers]);
 
   // 移動可能なマスを計算
   const getValidMoveTargets = (): Position[] => {
@@ -292,8 +350,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 p-4 bg-slate-900 min-h-screen text-white font-sans">
-      <h1 className="text-2xl font-bold mb-2">MOBAボードゲーム</h1>
+    <div className="flex flex-col items-center gap-2 p-2 bg-slate-900 min-h-screen text-white font-sans">
+      <h1 className="text-sm font-bold">MOBAボードゲーム</h1>
 
       {/* ステータスバー */}
       <div className="flex gap-4 items-center text-sm">
@@ -351,9 +409,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           <div className="text-xs text-slate-400 mb-2">
             {isAlternativeMove
               ? '緑のマスをクリックして移動先を選択（上下左右1マス）'
-              : (resolvingCard && resolvingCard.move > 0
-                ? '緑のマスをクリックして移動先を選択'
-                : '赤い敵をクリックして攻撃対象を選択')}
+              : (resolvingCard && resolvingCard.isSwap
+                ? 'ベンチのチャンピオンをクリックして交代対象を選択'
+                : (resolvingCard && resolvingCard.move > 0
+                  ? '緑のマスをクリックして移動先を選択'
+                  : '赤い敵をクリックして攻撃対象を選択'))}
           </div>
           <button
             className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded"
@@ -378,11 +438,17 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   ? 'border-red-800 bg-red-950 opacity-50'
                   : selectedChampionId === champion.id
                     ? 'border-yellow-400 bg-yellow-900/50 cursor-pointer ring-2 ring-yellow-400'
-                    : 'border-slate-600 bg-slate-800 cursor-pointer hover:bg-slate-700'
+                    : isResolutionPhase && isAwaitingTarget && resolvingCard?.isSwap && champion.knockoutTurnsRemaining === 0
+                      ? 'border-green-400 bg-green-900/50 cursor-pointer ring-2 ring-green-400 animate-pulse'
+                      : 'border-slate-600 bg-slate-800 cursor-pointer hover:bg-slate-700'
                   }`}
                 onClick={() => {
                   if (isDeployPhase && isMyDeployTurn && champion.pos === null) {
                     setSelectedChampionId(champion.id);
+                  }
+                  // 解決フェーズ: 交代先の選択
+                  if (isResolutionPhase && isAwaitingTarget && resolvingCard?.isSwap && champion.pos === null) {
+                    moves.selectTarget(undefined, champion.id);
                   }
                 }}
               >
@@ -446,8 +512,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         <div
           className="grid gap-0.5 bg-slate-800 p-2 rounded-lg"
           style={{
-            gridTemplateColumns: `repeat(${BOARD_SIZE}, 48px)`,
-            gridTemplateRows: `repeat(${BOARD_SIZE}, 48px)`
+            gridTemplateColumns: `repeat(${BOARD_SIZE}, 56px)`,
+            gridTemplateRows: `repeat(${BOARD_SIZE}, 56px)`
           }}
         >
           {Array.from({ length: BOARD_SIZE }).map((_, y) => (
@@ -478,7 +544,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               return (
                 <div
                   key={`${x}-${y}`}
-                  className={`w-12 h-12 flex items-center justify-center border border-slate-600/50 relative cursor-pointer ${bgClass}`}
+                  className={`w-14 h-14 flex items-center justify-center border border-slate-600/50 relative cursor-pointer ${bgClass}`}
                   onClick={() => handleCellClick(x, y)}
                 >
                   {tower && (
@@ -519,6 +585,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   )}
 
                   <span className="absolute bottom-0 right-0.5 text-[8px] text-slate-500">{x},{y}</span>
+
+                  {/* ダメージポップアップ */}
+                  {visibleDamageEvents
+                    .filter(e => e.x === x && e.y === y)
+                    .map(event => (
+                      <div
+                        key={event.id}
+                        className="damage-popup absolute inset-0 flex flex-col items-center justify-center z-50 pointer-events-none"
+                      >
+                        <span className="text-lg font-bold text-red-400 drop-shadow-lg">
+                          -{event.amount}
+                        </span>
+                        {event.effectiveness && (
+                          <span className="text-[10px] text-yellow-300 font-bold">
+                            {event.effectiveness}
+                          </span>
+                        )}
+                      </div>
+                    ))}
                 </div>
               );
             })
