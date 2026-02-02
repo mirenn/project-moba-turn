@@ -456,6 +456,27 @@ function generateActionCandidates(
       }
     }
     
+    // 移動なし・攻撃対象もなしの場合でも「その場で効果不発」として候補を追加
+    // （ボルトチェンジなど、対象がいない場合でもカードを消費して進行する必要がある）
+    if (card.move === 0 && card.power > 0) {
+      const attackRange = 2;
+      const hasTarget = [...enemies, ...enemyTowers].some(t => {
+        const pos = 'pos' in t && t.pos ? ('x' in t.pos ? t.pos : null) : null;
+        if (!pos) return false;
+        return getDistance(champion.pos!, pos) <= attackRange;
+      });
+      
+      if (!hasTarget) {
+        candidates.push({
+          championId: champion.id,
+          card,
+          isGuard: false,
+          isAlternativeMove: false,
+          // ターゲットなし（効果不発として処理される）
+        });
+      }
+    }
+    
     // 代替アクション（1マス移動のみ）
     const orthogonalDirs = [
       { dx: 1, dy: 0 },

@@ -124,17 +124,29 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     }
   }, [G.damageEvents, G.players, G.towers]);
 
+  // movesをrefで保持（useEffect内でstaleにならないように）
+  const movesRef = useRef(moves);
+  useEffect(() => {
+    movesRef.current = moves;
+  }, [moves]);
+
   // CPUアクションディレイの処理
   useEffect(() => {
+    console.log('[DEBUG] cpuActionDelay effect triggered, value:', G.cpuActionDelay);
     if (!G.cpuActionDelay) return;
 
+    console.log('[DEBUG] Setting timer for continueCPUAction');
     // 1秒後にCPUアクションを続行
     const timer = setTimeout(() => {
-      moves.continueCPUAction();
+      console.log('[DEBUG] Timer fired, calling continueCPUAction');
+      movesRef.current.continueCPUAction();
     }, 1000);
 
-    return () => clearTimeout(timer);
-  }, [G.cpuActionDelay, moves]);
+    return () => {
+      console.log('[DEBUG] Cleaning up timer');
+      clearTimeout(timer);
+    };
+  }, [G.cpuActionDelay]);
 
   // 移動可能なマスを計算
   const getValidMoveTargets = (): Position[] => {

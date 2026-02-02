@@ -469,9 +469,23 @@ const commonMoves = {
 
     // CPUアクション実行（ディレイ後にUIから呼ばれる）
     continueCPUAction: ({ G, random }: { G: GameState; random: any }) => {
-      if (G.gamePhase !== 'resolution') return;
-      if (!G.cpuActionDelay) return;
-      if (!G.currentResolvingAction) return;
+      console.log('[DEBUG] continueCPUAction called', {
+        gamePhase: G.gamePhase,
+        cpuActionDelay: G.cpuActionDelay,
+        currentResolvingAction: G.currentResolvingAction
+      });
+      if (G.gamePhase !== 'resolution') {
+        console.log('[DEBUG] Returning: not in resolution phase');
+        return;
+      }
+      if (!G.cpuActionDelay) {
+        console.log('[DEBUG] Returning: cpuActionDelay is false');
+        return;
+      }
+      if (!G.currentResolvingAction) {
+        console.log('[DEBUG] Returning: no currentResolvingAction');
+        return;
+      }
       
       const { action, team } = G.currentResolvingAction;
       
@@ -485,6 +499,7 @@ const commonMoves = {
       
       G.cpuActionDelay = false;
       G.currentResolvingAction = null;
+      console.log('[DEBUG] continueCPUAction completed, calling processNextAction');
       processNextAction(G, random);
     },
 
