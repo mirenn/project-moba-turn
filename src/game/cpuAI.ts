@@ -411,7 +411,7 @@ function generateActionCandidates(
     
     for (const movePos of movePositions) {
       const attackFrom = movePos || champion.pos;
-      const attackRange = card.move > 0 ? 1 : 2;
+      const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
       
       if (card.power > 0) {
         // 敵チャンピオンへの攻撃
@@ -459,7 +459,7 @@ function generateActionCandidates(
     // 移動なし・攻撃対象もなしの場合でも「その場で効果不発」として候補を追加
     // （ボルトチェンジなど、対象がいない場合でもカードを消費して進行する必要がある）
     if (card.move === 0 && card.power > 0) {
-      const attackRange = 2;
+      const attackRange = card.attackRange ?? 2;
       const hasTarget = [...enemies, ...enemyTowers].some(t => {
         const pos = 'pos' in t && t.pos ? ('x' in t.pos ? t.pos : null) : null;
         if (!pos) return false;

@@ -36,6 +36,7 @@ export interface Card {
   priority: number;        // 優先度（ユニーク値）
   power: number;           // 攻撃力（0の場合は非攻撃技）
   move: number;            // 移動距離
+  attackRange?: number;    // 攻撃範囲（省略時は移動ありなら1、なしなら2）
   effect?: string;         // 特殊効果の説明
   effectFn?: string;       // 効果処理の識別子
   isSwap?: boolean;        // 交代カードかどうか

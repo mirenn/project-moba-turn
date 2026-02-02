@@ -383,7 +383,7 @@ const commonMoves = {
               // 移動先も未定なら判定不能なのでfalse
                readyToResolve = false;
             } else {
-              const attackRange = card.move > 0 ? 1 : 2;
+              const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
               const enemyTeam = team === '0' ? '1' : '0';
               
               // 敵チャンピオンチェック
@@ -851,7 +851,7 @@ function resolveCardAction(
   
   // 攻撃処理
   if (card.power > 0) {
-    const attackRange = card.move > 0 ? 1 : 2;
+    const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
     
     // チャンピオンへの攻撃
     if (action.targetChampionId) {

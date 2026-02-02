@@ -208,10 +208,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     const sourcePos = pendingMovePos || resolvingChampion.pos;
 
     // 攻撃範囲の決定: 
-    // - 移動ありカード: 移動後は隣接(1)、移動前は予測範囲(3)
-    // - 移動なしカード: 範囲(2)
-    let attackRange = 2;
-    if (resolvingCard.move > 0) {
+    // - カードにattackRangeが設定されていればそれを使用
+    // - 未設定の場合: 移動ありカードは移動後は隣接(1)、移動前は予測範囲(3)
+    // - 未設定の場合: 移動なしカードは範囲(2)
+    let attackRange = resolvingCard.attackRange ?? (resolvingCard.move > 0 ? 1 : 2);
+    if (resolvingCard.move > 0 && !resolvingCard.attackRange) {
       attackRange = pendingMovePos ? 1 : 3;
     }
 
@@ -673,6 +674,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                               <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
                                 {card.power > 0 && <span>威力:{card.power}</span>}
                                 {card.move > 0 && <span>移動:{card.move}</span>}
+                                {card.power > 0 && <span className="text-orange-300">範囲:{card.attackRange ?? (card.move > 0 ? 1 : 2)}</span>}
                               </div>
                             </div>
 
