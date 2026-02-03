@@ -147,7 +147,7 @@ export interface GameState {
   
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー
-  cpuActionDelay: boolean;      // CPUアクション実行中のディレイ表示
+  cpuActionDelay: number;       // CPUアクション実行中のディレイトークン（0=無効、>0=ディレイ中）
 }
 
 // 旧型との互換性のため（移行期間中）

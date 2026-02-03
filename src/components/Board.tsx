@@ -127,7 +127,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   // CPUアクションディレイの処理
   useEffect(() => {
     console.log('[DEBUG] cpuActionDelay effect triggered, value:', G.cpuActionDelay);
-    if (!G.cpuActionDelay) return;
+    if (G.cpuActionDelay === 0) return;
 
     console.log('[DEBUG] Setting timer for continueCPUAction');
     // 1秒後にCPUアクションを続行

@@ -515,8 +515,8 @@ const commonMoves = {
         console.log('[DEBUG] Returning: not in resolution phase');
         return;
       }
-      if (!G.cpuActionDelay) {
-        console.log('[DEBUG] Returning: cpuActionDelay is false');
+      if (G.cpuActionDelay === 0) {
+        console.log('[DEBUG] Returning: cpuActionDelay is 0');
         return;
       }
       if (!G.currentResolvingAction) {
@@ -534,7 +534,7 @@ const commonMoves = {
         resolveCardAction(G, action, team, random);
       }
       
-      G.cpuActionDelay = false;
+      G.cpuActionDelay = 0;
       G.currentResolvingAction = null;
       console.log('[DEBUG] continueCPUAction completed, calling processNextAction');
       processNextAction(G, random);
@@ -627,7 +627,7 @@ export const LoLBoardGame = {
       currentResolvingAction: null,
       awaitingTargetSelection: false,
       damageEvents: [],
-      cpuActionDelay: false,
+      cpuActionDelay: 0,
     };
   },
 
@@ -735,7 +735,7 @@ function processNextAction(G: GameState, random: any) {
       processNextAction(G, random);
     } else {
       // CPUのガードはディレイ表示
-      G.cpuActionDelay = true;
+      G.cpuActionDelay = Date.now();
       const championForLog = G.players[team].champions.find(c => c.id === action.championId);
       G.turnLog.push(`[CPU] ${championForLog ? getChampionDisplayName(championForLog) : 'チャンピオン'} がガードを選択...`);
     }
@@ -766,7 +766,7 @@ function processNextAction(G: GameState, random: any) {
   }
   
   // CPUアクションディレイを設定（UIが続行を呼ぶまで待機）
-  G.cpuActionDelay = true;
+  G.cpuActionDelay = Date.now();
   G.turnLog.push(`[CPU] ${getChampionDisplayName(champion)} が ${card?.nameJa || 'カード'} を使用...`);
 }
 
