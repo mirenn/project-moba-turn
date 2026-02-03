@@ -8,7 +8,7 @@ import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } 
 
 type Props = BoardProps<GameState>;
 
-const BOARD_SIZE = 9;
+const BOARD_SIZE = 13;
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgColor: string }> = {
   water: { icon: <Droplets size={12} />, color: 'text-blue-400', bgColor: 'bg-blue-600' },
@@ -96,13 +96,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         targetPos = champion.pos;
       }
 
-      // タワーを検索
-      if (!targetPos) {
-        const tower = G.towers.find(t => t.id === event.targetId);
-        if (tower) {
-          targetPos = tower.pos;
-        }
-      }
+
 
       if (targetPos) {
         newEvents.push({
@@ -122,7 +116,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         setVisibleDamageEvents(prev => prev.filter(e => !eventIds.includes(e.id)));
       }, 1000);
     }
-  }, [G.damageEvents, G.players, G.towers]);
+  }, [G.damageEvents, G.players]);
 
   // movesをrefで保持（useEffect内でstaleにならないように）
   const movesRef = useRef(moves);
@@ -170,8 +164,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) continue;
 
         const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
-        const isTowerPos = G.towers.some(t => t.pos.x === x && t.pos.y === y);
-        if (!isOccupied && !isTowerPos) {
+        if (!isOccupied) {
           positions.push({ x, y });
         }
       }
@@ -189,8 +182,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         const dist = getDistance(resolvingChampion.pos, { x, y });
         if (dist > 0 && dist <= resolvingCard.move) {
           const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
-          const isTowerPos = G.towers.some(t => t.pos.x === x && t.pos.y === y);
-          if (!isOccupied && !isTowerPos) {
+          if (!isOccupied) {
             positions.push({ x, y });
           }
         }
@@ -226,13 +218,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       }
     });
 
-    // 敵タワー
-    const enemyTowers = G.towers.filter(t => t.team === enemyTeam);
-    enemyTowers.forEach(tower => {
-      if (sourcePos && getDistance(sourcePos, tower.pos) <= attackRange) {
-        targets.push(tower);
-      }
-    });
+    // 攻撃可能な床（ユーザー要望：攻撃で床を塗る）
+    // 一旦ターゲット選択時は敵ユニットのみを選択可能とするが、
+    // 任意地点攻撃を可能にするならここを修正する必要がある。
+    // 今回は「敵ユニットがいるマス」または「移動先」を塗る仕様としたため、
+    // 明示的な「空のマスへの攻撃」ターゲット選択は実装しない（仕様確認待ちだが、簡易化のため）
+    // もし空マス攻撃が必要なら、Board全体がターゲット候補になる。
 
     return targets;
   };
@@ -245,14 +236,14 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const getCellContent = (x: number, y: number) => {
     const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
     const champion = allChampions.find(c => c.pos?.x === x && c.pos?.y === y);
-    const tower = G.towers.find(t => t.pos.x === x && t.pos.y === y);
-    return { champion, tower };
+    const territoryOwner = G.territory[y][x];
+    return { champion, territoryOwner };
   };
 
   const handleCellClick = (x: number, y: number) => {
     // 解決フェーズ: ターゲット選択
     if (isResolutionPhase && isAwaitingTarget) {
-      const { champion, tower } = getCellContent(x, y);
+      const { champion } = getCellContent(x, y);
 
       // 移動先として選択
       const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
@@ -269,16 +260,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         'definitionId' in t && t.pos?.x === x && t.pos?.y === y
       ) as ChampionInstance | undefined;
 
-      const targetEnemyTower = validAttackTargets.find(t =>
-        !('definitionId' in t) && t.pos.x === x && t.pos.y === y
-      ) as Tower | undefined;
-
       if (targetEnemy) {
         moves.selectTarget(undefined, targetEnemy.id, undefined);
-        return;
-      }
-      if (targetEnemyTower) {
-        moves.selectTarget(undefined, undefined, targetEnemyTower.id);
         return;
       }
 
@@ -292,9 +275,9 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
       // 配置可能かチェック
       const isSpawnable = spawnablePositions.some(p => p.x === x && p.y === y);
-      const { champion, tower } = getCellContent(x, y); // 既に何かいればNG
+      const { champion } = getCellContent(x, y); // 既に何かいればNG
 
-      if (isSpawnable && !champion && !tower) {
+      if (isSpawnable && !champion) {
         moves.deployChampion(selectedChampionId, x, y);
         setSelectedChampionId(null);
       }
@@ -397,6 +380,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             {isMyDeployTurn ? 'あなたの配置番です' : '相手の配置番です'}
           </div>
         )}
+        <div className="ml-auto flex gap-4 font-bold">
+          <span className="text-blue-400">青: {G.scores['0']}pt</span>
+          <span className="text-red-400">赤: {G.scores['1']}pt</span>
+          <span className="text-slate-400 text-xs self-center">（50ptで勝利）</span>
+        </div>
       </div>
 
       {/* 解決フェーズ: ターゲット選択UI */}
@@ -543,7 +531,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         >
           {Array.from({ length: BOARD_SIZE }).map((_, y) => (
             Array.from({ length: BOARD_SIZE }).map((_, x) => {
-              const { champion, tower } = getCellContent(x, y);
+              const { champion, territoryOwner } = getCellContent(x, y);
               const isSelected = champion?.id === selectedChampionId;
               const isSelectedEnemy = champion?.id === selectedEnemyChampionId;
               const isActing = champion && actingChampionIds.includes(champion.id);
@@ -569,19 +557,16 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               return (
                 <div
                   key={`${x}-${y}`}
-                  className={`w-14 h-14 flex items-center justify-center border border-slate-600/50 relative cursor-pointer ${bgClass}`}
+                  className={`w-10 h-10 flex items-center justify-center border border-slate-600/30 relative cursor-pointer ${bgClass}`}
                   onClick={() => handleCellClick(x, y)}
                 >
-                  {tower && (
-                    <div className={`flex flex-col items-center ${tower.team === '0' ? 'text-blue-400' : 'text-red-400'}`}>
-                      <div className="relative">
-                        <div className="text-lg">🏰</div>
-                        <div className={`absolute -top-2 -right-2 w-4 h-4 rounded-full flex items-center justify-center ${getTypeConfig(tower.type).bgColor} ring-1 ring-white/50`}>
-                          {getTypeConfig(tower.type).icon}
-                        </div>
-                      </div>
-                      <span className="text-[10px]">{tower.hp}</span>
-                    </div>
+                  {/* 陣地カラー表示 */}
+                  {territoryOwner === '0' && <div className="absolute inset-0 bg-blue-900/40 pointer-events-none"></div>}
+                  {territoryOwner === '1' && <div className="absolute inset-0 bg-red-900/40 pointer-events-none"></div>}
+
+                  {/* Admin Domain (中央3x3) ハイライト */}
+                  {x >= 5 && x <= 7 && y >= 5 && y <= 7 && (
+                    <div className="absolute inset-0 border border-yellow-500/30 pointer-events-none"></div>
                   )}
 
                   {champion && (

@@ -13,25 +13,22 @@ import {
   Position, 
   CardAction, 
   GuardAction,
-  Tower,
   ElementType
 } from './types';
-import { getChampionById } from './champions';
 import { calculateDamage, getTypeEffectiveness, TYPE_EFFECTIVENESS } from './typeChart';
 
 // ============================================
 // 定数
 // ============================================
-const BOARD_SIZE = 9;
+const BOARD_SIZE = 13;
 
 // ============================================
 // 重み設定（難易度調整可能）
 // ============================================
 export const AI_WEIGHTS = {
-  victoryProgress: 100,   // 勝利マス接近
+  victoryProgress: 100,   // 敵陣侵攻
   killPotential: 80,      // 撃破可能性
   typeAdvantage: 40,      // タイプ相性
-  towerDamage: 60,        // タワー攻撃
   survival: 50,           // 生存価値
   positioning: 30,        // ポジショニング
   cardPriority: 10,       // カード優先度ボーナス
@@ -47,7 +44,6 @@ interface ActionCandidate {
   isAlternativeMove: boolean;
   targetPos?: Position;
   targetChampionId?: string;
-  targetTowerId?: string;
 }
 
 interface ScoredAction extends ActionCandidate {
@@ -63,47 +59,41 @@ function getDistance(p1: Position, p2: Position): number {
   return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
 }
 
-function getVictorySquares(team: Team): Position[] {
-  // 左右配置: 各チームは敵タワーの後ろのマスを目指す
+function getVictoryTargets(team: Team): Position[] {
+  // 敵陣の奥を目指す（スコア稼ぎのため）
   if (team === '0') {
-    // 青チーム: 右側（Team 1のタワーの後ろ）を目指す
+    // 青チーム: 右端 (x=12) を目指す
     return [
-      { x: 8, y: 4 },  // (7,4)の後ろ
-      { x: 7, y: 2 },  // (6,2)の後ろ
-      { x: 7, y: 6 },  // (6,6)の後ろ
+      { x: 12, y: 3 }, { x: 12, y: 6 }, { x: 12, y: 9 }
     ];
   } else {
-    // 赤チーム: 左側（Team 0のタワーの後ろ）を目指す
+    // 赤チーム: 左端 (x=0) を目指す
     return [
-      { x: 0, y: 4 },  // (1,4)の後ろ
-      { x: 1, y: 2 },  // (2,2)の後ろ
-      { x: 1, y: 6 },  // (2,6)の後ろ
+      { x: 0, y: 3 }, { x: 0, y: 6 }, { x: 0, y: 9 }
     ];
   }
 }
 
 function getSpawnPositions(team: Team): Position[] {
-  // 左右配置: タワー周辺のスポーン位置
-  // Team 0 (左側): (1,4), (2,2), (2,6)
-  // Team 1 (右側): (7,4), (6,2), (6,6)
+  // 13x13ボードの両端3マス分がスポーンエリア
   if (team === '0') {
-    return [
-      // around (1,4)
-      { x: 0, y: 3 }, { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 1, y: 3 }, { x: 1, y: 5 }, { x: 2, y: 4 },
-      // around (2,2)
-      { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 1 }, { x: 3, y: 2 }, { x: 2, y: 3 },
-      // around (2,6)
-      { x: 1, y: 6 }, { x: 1, y: 7 }, { x: 2, y: 5 }, { x: 2, y: 7 }, { x: 3, y: 6 },
-    ];
+    // 青チーム: 左側 (x=0~2)
+    const positions: Position[] = [];
+    for (let x = 0; x <= 2; x++) {
+      for (let y = 3; y <= 9; y++) {
+        positions.push({ x, y });
+      }
+    }
+    return positions;
   } else {
-    return [
-      // around (7,4)
-      { x: 8, y: 3 }, { x: 8, y: 4 }, { x: 8, y: 5 }, { x: 7, y: 3 }, { x: 7, y: 5 }, { x: 6, y: 4 },
-      // around (6,2)
-      { x: 7, y: 1 }, { x: 7, y: 2 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 6, y: 3 },
-      // around (6,6)
-      { x: 7, y: 6 }, { x: 7, y: 7 }, { x: 6, y: 5 }, { x: 6, y: 7 }, { x: 5, y: 6 },
-    ];
+    // 赤チーム: 右側 (x=10~12)
+    const positions: Position[] = [];
+    for (let x = 10; x <= 12; x++) {
+      for (let y = 3; y <= 9; y++) {
+        positions.push({ x, y });
+      }
+    }
+    return positions;
   }
 }
 
@@ -112,8 +102,7 @@ function isPositionOccupied(G: GameState, pos: Position, excludeId?: string): bo
   const championOccupied = allChampions.some(c => 
     c.id !== excludeId && c.pos?.x === pos.x && c.pos?.y === pos.y
   );
-  const towerOccupied = G.towers.some(t => t.pos.x === pos.x && t.pos.y === pos.y);
-  return championOccupied || towerOccupied;
+  return championOccupied;
 }
 
 function isPositionValid(pos: Position): boolean {
@@ -125,8 +114,8 @@ function isPositionValid(pos: Position): boolean {
 // ============================================
 
 /**
- * 勝利マス接近評価
- * 移動後の位置が勝利マスに近いほど高スコア
+ * 敵陣侵攻評価
+ * 移動後の位置が敵陣奥に近いほど高スコア
  */
 function evaluateVictoryProgress(
   G: GameState, 
@@ -137,22 +126,17 @@ function evaluateVictoryProgress(
   if (!champion.pos) return 0;
   
   const newPos = action.targetPos || champion.pos;
-  const victorySquares = getVictorySquares(team);
+  const victoryTargets = getVictoryTargets(team);
   
   // 現在位置からの最短距離
-  const currentMinDist = Math.min(...victorySquares.map(v => getDistance(champion.pos!, v)));
+  const currentMinDist = Math.min(...victoryTargets.map(v => getDistance(champion.pos!, v)));
   // 移動後の最短距離
-  const newMinDist = Math.min(...victorySquares.map(v => getDistance(newPos, v)));
+  const newMinDist = Math.min(...victoryTargets.map(v => getDistance(newPos, v)));
   
   // 距離が縮まった場合にボーナス
   const improvement = currentMinDist - newMinDist;
   if (improvement > 0) {
     return (improvement / 8) * AI_WEIGHTS.victoryProgress;
-  }
-  
-  // 勝利マスに到達できる場合は最大スコア
-  if (newMinDist === 0) {
-    return AI_WEIGHTS.victoryProgress * 2; // 勝利確定は最優先
   }
   
   return 0;
@@ -176,9 +160,6 @@ function evaluateTypeAdvantage(
   if (action.targetChampionId) {
     const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
     if (target) targetType = target.currentType;
-  } else if (action.targetTowerId) {
-    const tower = G.towers.find(t => t.id === action.targetTowerId);
-    if (tower) targetType = tower.type;
   }
   
   if (!targetType) return 0;
@@ -266,38 +247,6 @@ function evaluateSurvival(
 }
 
 /**
- * タワーダメージ評価
- * タワーを攻撃できる場合のスコア
- */
-function evaluateTowerDamage(
-  G: GameState,
-  champion: ChampionInstance,
-  action: ActionCandidate,
-  team: Team
-): number {
-  if (!action.card.power || action.card.power <= 0) return 0;
-  if (!action.targetTowerId) return 0;
-  
-  const tower = G.towers.find(t => t.id === action.targetTowerId);
-  if (!tower) return 0;
-  
-  const { damage } = calculateDamage(
-    action.card.power,
-    action.card.type,
-    champion.currentType,
-    tower.type
-  );
-  
-  // タワー破壊可能
-  if (tower.hp <= damage) {
-    return AI_WEIGHTS.towerDamage * 1.5;
-  }
-  
-  // ダメージを与えられる
-  return AI_WEIGHTS.towerDamage * 0.3;
-}
-
-/**
  * ポジショニング評価
  * 良い位置取りを評価
  */
@@ -324,8 +273,9 @@ function evaluatePositioning(
   }
   
   // 敵陣に近づく動きを評価（左右配置）
-  const enemyBase = team === '0' ? { x: 8, y: 4 } : { x: 0, y: 4 };
-  const currentDist = champion.pos ? getDistance(champion.pos, enemyBase) : 16;
+  // 13x13 なのでターゲットも修正
+  const enemyBase = team === '0' ? { x: 12, y: 6 } : { x: 0, y: 6 };
+  const currentDist = champion.pos ? getDistance(champion.pos, enemyBase) : 20;
   const newDist = getDistance(action.targetPos, enemyBase);
   
   if (newDist < currentDist) {
@@ -350,7 +300,6 @@ function evaluateAction(
   breakdown.typeAdvantage = evaluateTypeAdvantage(G, champion, action, team);
   breakdown.killPotential = evaluateKillPotential(G, champion, action, team);
   breakdown.survival = evaluateSurvival(G, champion, action, team);
-  breakdown.towerDamage = evaluateTowerDamage(G, champion, action, team);
   breakdown.positioning = evaluatePositioning(G, champion, action, team);
   
   // カード優先度ボーナス（高優先度カードは先手を取れる）
@@ -398,6 +347,7 @@ function generateActionCandidates(
           
           const newPos = { x: champion.pos.x + mx, y: champion.pos.y + my };
           if (!isPositionValid(newPos)) continue;
+          // 自軍でも敵軍でもユニットがいる場所には入れない（踏むのはNG）
           if (isPositionOccupied(G, newPos, champion.id)) continue;
           
           movePositions.push(newPos);
@@ -407,7 +357,6 @@ function generateActionCandidates(
     
     // 攻撃対象候補
     const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
-    const enemyTowers = G.towers.filter(t => t.team === enemyTeam);
     
     for (const movePos of movePositions) {
       const attackFrom = movePos || champion.pos;
@@ -425,20 +374,6 @@ function generateActionCandidates(
               isAlternativeMove: false,
               targetPos: movePos,
               targetChampionId: enemy.id,
-            });
-          }
-        }
-        
-        // タワーへの攻撃
-        for (const tower of enemyTowers) {
-          if (getDistance(attackFrom, tower.pos) <= attackRange) {
-            candidates.push({
-              championId: champion.id,
-              card,
-              isGuard: false,
-              isAlternativeMove: false,
-              targetPos: movePos,
-              targetTowerId: tower.id,
             });
           }
         }
@@ -460,10 +395,9 @@ function generateActionCandidates(
     // （ボルトチェンジなど、対象がいない場合でもカードを消費して進行する必要がある）
     if (card.move === 0 && card.power > 0) {
       const attackRange = card.attackRange ?? 2;
-      const hasTarget = [...enemies, ...enemyTowers].some(t => {
-        const pos = 'pos' in t && t.pos ? ('x' in t.pos ? t.pos : null) : null;
-        if (!pos) return false;
-        return getDistance(champion.pos!, pos) <= attackRange;
+      const hasTarget = enemies.some(t => {
+        if (!t.pos) return false;
+        return getDistance(champion.pos!, t.pos) <= attackRange;
       });
       
       if (!hasTarget) {
@@ -566,7 +500,7 @@ export function selectCPUActions(G: GameState, cpuTeam: Team): (CardAction | Gua
         cardId: action.card.id,
         targetPos: action.targetPos,
         targetChampionId: action.targetChampionId,
-        targetTowerId: action.targetTowerId,
+        // targetTowerId は削除
         isAlternativeMove: action.isAlternativeMove,
       });
       usedChampionIds.add(champion.id);
@@ -599,11 +533,12 @@ export function selectCPUTarget(
   G: GameState,
   champion: ChampionInstance,
   card: Card,
-  team: Team
+  team: Team,
+  isAlternativeMove: boolean = false
 ): { targetPos?: Position; targetChampionId?: string; targetTowerId?: string } {
   // 候補を生成して最良のものを選択
   const candidates = generateActionCandidates(G, champion, team)
-    .filter(c => c.card.id === card.id && !c.isGuard);
+    .filter(c => c.card.id === card.id && !c.isGuard && c.isAlternativeMove === isAlternativeMove);
   
   if (candidates.length === 0) {
     return {};
@@ -616,7 +551,8 @@ export function selectCPUTarget(
   return {
     targetPos: best.targetPos,
     targetChampionId: best.targetChampionId,
-    targetTowerId: best.targetTowerId,
+    // targetTowerId は削除されたが型定義上残っている場合は undefined を返す
+    targetTowerId: undefined,
   };
 }
 
@@ -634,17 +570,16 @@ export function selectCPUDeployPosition(
   // 空いている位置を探す
   const availablePositions = spawnPositions.filter(pos => {
     const isOccupied = allChampions.some(c => c.pos?.x === pos.x && c.pos?.y === pos.y);
-    const isTowerPos = G.towers.some(t => t.pos.x === pos.x && t.pos.y === pos.y);
-    return !isOccupied && !isTowerPos;
+    return !isOccupied; // タワー判定は削除
   });
   
   if (availablePositions.length === 0) return null;
   
-  // 勝利マスに近い位置を優先
-  const victorySquares = getVictorySquares(team);
+  // 勝利ターゲット（敵陣奥）に近い位置を優先
+  const victoryTargets = getVictoryTargets(team);
   availablePositions.sort((a, b) => {
-    const distA = Math.min(...victorySquares.map(v => getDistance(a, v)));
-    const distB = Math.min(...victorySquares.map(v => getDistance(b, v)));
+    const distA = Math.min(...victoryTargets.map(v => getDistance(a, v)));
+    const distB = Math.min(...victoryTargets.map(v => getDistance(b, v)));
     return distA - distB;
   });
   

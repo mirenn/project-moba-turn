@@ -1,9 +1,9 @@
 import { ActivePlayers, TurnOrder } from 'boardgame.io/core';
 import { 
   GameState, 
-  Tower, 
   Position, 
   Team, 
+  TerritoryOwner,
   ChampionInstance, 
   PlayerState, 
   CardAction,
@@ -17,68 +17,114 @@ import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
 import { selectCPUActions, selectCPUTarget, selectCPUDeployPosition } from './cpuAI';
 
-const BOARD_SIZE = 9;
+const BOARD_SIZE = 13;
 const TURNS_PER_PHASE = 4;
 const KNOCKOUT_TURNS = 4;
 const BENCH_RECOVERY_PERCENT = 0.15;
 const GUARD_DAMAGE_REDUCTION = 1 / 3;
 const CHAMPIONS_ON_FIELD = 3;
+const VICTORY_SCORE = 50;
+const ADMIN_DOMAIN_POINTS = 5; // 中央マスのポイント
+const KILL_POINTS = 5; // 撃破ポイント
 
-// 勝利マス（タワーの後ろ）の定義
-// 各チームの勝利マスは敵タワーの後ろに位置する
-// タワーが破壊されるまで勝利判定は発動しない
-function getVictorySquaresForTeam(team: Team): { pos: Position; behindTowerId: string }[] {
-  // team '0' は右側（Team 1）のタワーの後ろを目指す
-  // team '1' は左側（Team 0）のタワーの後ろを目指す
-  if (team === '0') {
-    return [
-      { pos: { x: 8, y: 4 }, behindTowerId: 'tower-1-1' },  // (7,4)の後ろ
-      { pos: { x: 7, y: 2 }, behindTowerId: 'tower-1-2' },  // (6,2)の後ろ
-      { pos: { x: 7, y: 6 }, behindTowerId: 'tower-1-3' },  // (6,6)の後ろ
-    ];
-  } else {
-    return [
-      { pos: { x: 0, y: 4 }, behindTowerId: 'tower-0-1' },  // (1,4)の後ろ
-      { pos: { x: 1, y: 2 }, behindTowerId: 'tower-0-2' },  // (2,2)の後ろ
-      { pos: { x: 1, y: 6 }, behindTowerId: 'tower-0-3' },  // (2,6)の後ろ
-    ];
-  }
+// Admin Domain: 中央3x3 (5,5) ~ (7,7)
+function isAdminDomain(x: number, y: number): boolean {
+  return x >= 5 && x <= 7 && y >= 5 && y <= 7;
 }
 
-// 勝利マスの位置リスト（タワー破壊状況は考慮しない）
-function getVictorySquares(team: Team): Position[] {
-  return getVictorySquaresForTeam(team).map(vs => vs.pos);
+// 陣地を塗る
+export function paintTile(G: GameState, x: number, y: number, team: Team): void {
+  if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return;
+  G.territory[y][x] = team;
 }
 
-// 指定位置が勝利マスかどうかをチェック（タワー破壊済みの場合のみtrue）
-function isVictorySquare(pos: Position, forTeam: Team, towers: Tower[]): boolean {
-  const victorySquares = getVictorySquaresForTeam(forTeam);
-  for (const vs of victorySquares) {
-    if (vs.pos.x === pos.x && vs.pos.y === pos.y) {
-      // 対応するタワーが破壊されているかチェック
-      const towerExists = towers.some(t => t.id === vs.behindTowerId);
-      return !towerExists; // タワーが存在しなければ勝利マスとして有効
+// スコアを計算（現在の陣地面積）
+export function calculateScores(G: GameState): void {
+  const scores: Record<Team, number> = { '0': 0, '1': 0 };
+  
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const owner = G.territory[y][x];
+      if (owner !== null) {
+        const points = isAdminDomain(x, y) ? ADMIN_DOMAIN_POINTS : 1;
+        scores[owner] += points;
+      }
     }
   }
-  return false;
+  
+  G.scores = scores;
 }
 
-// 自陣の勝利マス（敵が目指すマス）かどうかをチェック
-function isOwnVictorySquare(pos: Position, team: Team): boolean {
-  const enemyTeam = team === '0' ? '1' : '0';
-  const enemyVictorySquares = getVictorySquares(enemyTeam);
-  return enemyVictorySquares.some(vs => vs.x === pos.x && vs.y === pos.y);
-}
-
-function createTower(id: string, team: Team, x: number, y: number, type: ElementType): Tower {
-  return {
-    id,
-    hp: 150,
-    maxHp: 150,
-    pos: { x, y },
-    team,
-    type,
-  };
+// Flood-fill で囲まれた領域を検出して塗りつぶす
+// 盤面の端は自色と同じ扱い
+export function detectAndFillEnclosures(G: GameState, team: Team): void {
+  const size = BOARD_SIZE;
+  const territory = G.territory;
+  
+  // 盤外からアクセス可能な（囲まれていない）マスを特定
+  // 自チームのマスまたは盤面の端は「壁」として扱う
+  const visited: boolean[][] = Array(size).fill(null).map(() => Array(size).fill(false));
+  const reachableFromEdge: boolean[][] = Array(size).fill(null).map(() => Array(size).fill(false));
+  
+  // BFSで盤面の端から到達可能なマスを探索
+  const queue: Position[] = [];
+  
+  // 盤面の4辺から開始点を追加（自分の領域でないマス）
+  for (let i = 0; i < size; i++) {
+    // 上端 (y=0)
+    if (territory[0][i] !== team) {
+      queue.push({ x: i, y: 0 });
+      reachableFromEdge[0][i] = true;
+    }
+    // 下端 (y=size-1)
+    if (territory[size - 1][i] !== team) {
+      queue.push({ x: i, y: size - 1 });
+      reachableFromEdge[size - 1][i] = true;
+    }
+    // 左端 (x=0)
+    if (territory[i][0] !== team) {
+      queue.push({ x: 0, y: i });
+      reachableFromEdge[i][0] = true;
+    }
+    // 右端 (x=size-1)
+    if (territory[i][size - 1] !== team) {
+      queue.push({ x: size - 1, y: i });
+      reachableFromEdge[i][size - 1] = true;
+    }
+  }
+  
+  // BFS: 自チームの領域を通らずに盤面端から到達可能なマスを探索
+  const directions = [
+    { dx: 0, dy: -1 }, // 上
+    { dx: 0, dy: 1 },  // 下
+    { dx: -1, dy: 0 }, // 左
+    { dx: 1, dy: 0 },  // 右
+  ];
+  
+  while (queue.length > 0) {
+    const pos = queue.shift()!;
+    
+    for (const dir of directions) {
+      const nx = pos.x + dir.dx;
+      const ny = pos.y + dir.dy;
+      
+      if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
+      if (reachableFromEdge[ny][nx]) continue;
+      if (territory[ny][nx] === team) continue; // 自チームのマスは壁
+      
+      reachableFromEdge[ny][nx] = true;
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  
+  // 盤面端から到達不可能なマス = 囲まれている → 塗りつぶす
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!reachableFromEdge[y][x] && territory[y][x] !== team) {
+        territory[y][x] = team;
+      }
+    }
+  }
 }
 
 function getDistance(p1: Position, p2: Position): number {
@@ -110,31 +156,27 @@ function createChampionInstance(
 }
 
 export function getSpawnPositions(team: Team): Position[] {
-  // タワー周辺のスポーン可能マスを定義（左右配置）
-  // タワー位置:
-  // Team 0 (左側): (1,4), (2,2), (2,6)
-  // Team 1 (右側): (7,4), (6,2), (6,6)
+  // 左右配置: Team 0 (左側), Team 1 (右側)
+  // 13x13ボードの両端3マス分がスポーンエリア
   
   if (team === '0') {
-    // 青チーム: 左側のタワー周辺
-    return [
-      // around (1,4)
-      { x: 0, y: 3 }, { x: 0, y: 4 }, { x: 0, y: 5 }, { x: 1, y: 3 }, { x: 1, y: 5 }, { x: 2, y: 4 },
-      // around (2,2)
-      { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 1 }, { x: 3, y: 2 }, { x: 2, y: 3 },
-      // around (2,6)
-      { x: 1, y: 6 }, { x: 1, y: 7 }, { x: 2, y: 5 }, { x: 2, y: 7 }, { x: 3, y: 6 },
-    ];
+    // 青チーム: 左側 (x=0~2)
+    const positions: Position[] = [];
+    for (let x = 0; x <= 2; x++) {
+      for (let y = 3; y <= 9; y++) {
+        positions.push({ x, y });
+      }
+    }
+    return positions;
   } else {
-    // 赤チーム: 右側のタワー周辺
-    return [
-      // around (7,4)
-      { x: 8, y: 3 }, { x: 8, y: 4 }, { x: 8, y: 5 }, { x: 7, y: 3 }, { x: 7, y: 5 }, { x: 6, y: 4 },
-      // around (6,2)
-      { x: 7, y: 1 }, { x: 7, y: 2 }, { x: 6, y: 1 }, { x: 5, y: 2 }, { x: 6, y: 3 },
-      // around (6,6)
-      { x: 7, y: 6 }, { x: 7, y: 7 }, { x: 6, y: 5 }, { x: 6, y: 7 }, { x: 5, y: 6 },
-    ];
+    // 赤チーム: 右側 (x=10~12)
+    const positions: Position[] = [];
+    for (let x = 10; x <= 12; x++) {
+      for (let y = 3; y <= 9; y++) {
+        positions.push({ x, y });
+      }
+    }
+    return positions;
   }
 }
 
@@ -391,12 +433,7 @@ const commonMoves = {
                 c.pos !== null && getDistance(effectivePos, c.pos) <= attackRange
               );
               
-              // 敵タワーチェック
-              const hasEnemyTower = G.towers.some(t => 
-                t.team === enemyTeam && getDistance(effectivePos, t.pos) <= attackRange
-              );
-              
-              if (hasEnemyChampion || hasEnemyTower) {
+              if (hasEnemyChampion) {
                 // 対象がいるのに選択されていない -> 待機
                 readyToResolve = false;
               } else {
@@ -525,8 +562,7 @@ const commonMoves = {
       // 配置位置の妥当性チェック
       // 1. 他のユニットがいないか
       const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-      if (allChampions.some(c => c.pos?.x === x && c.pos?.y === y) || 
-          G.towers.some(t => t.pos.x === x && t.pos.y === y)) {
+      if (allChampions.some(c => c.pos?.x === x && c.pos?.y === y)) {
         return; // 重なっている
       }
       
@@ -560,18 +596,10 @@ export const LoLBoardGame = {
   name: 'lol-board-game',
 
   setup: ({ random }: { random: any }): GameState => {
-    const towers: Tower[] = [];
-    
-    // タイプをランダムに決定するヘルパー
-    const getRandomType = () => ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
-
-    towers.push(createTower('tower-0-1', '0', 1, 4, getRandomType())); // 中央
-    towers.push(createTower('tower-0-2', '0', 2, 2, getRandomType())); // 上側
-    towers.push(createTower('tower-0-3', '0', 2, 6, getRandomType())); // 下側
-
-    towers.push(createTower('tower-1-1', '1', 7, 4, getRandomType())); // 中央
-    towers.push(createTower('tower-1-2', '1', 6, 2, getRandomType())); // 上側
-    towers.push(createTower('tower-1-3', '1', 6, 6, getRandomType())); // 下側
+    // 13x13の陣地マップを初期化（全てnull = 未塗り）
+    const territory: TerritoryOwner[][] = Array(BOARD_SIZE)
+      .fill(null)
+      .map(() => Array(BOARD_SIZE).fill(null));
 
     const team0Champions = ['gekogekoga', 'enshishi', 'raichou', 'kidouba'];
     const team1Champions = ['kidouba', 'raichou', 'enshishi', 'gekogekoga'];
@@ -583,14 +611,15 @@ export const LoLBoardGame = {
 
     return {
       players,
-      towers,
+      territory,
+      scores: { '0': 0, '1': 0 },
       currentPhase: 1,
       turnInPhase: 1,
       turnActions: { 
         '0': { actions: [] }, 
         '1': { actions: [] } 
       },
-      turnLog: ['ゲーム開始 - 9×9ボード', '【ルール】まずはチャンピオンを配置してください'],
+      turnLog: ['ゲーム開始 - 13×13ボード（陣取りモード）', '【ルール】先に50ポイント到達で勝利！', 'まずはチャンピオンを配置してください'],
       gamePhase: 'deploy',
       deployTurn: '0',
       winner: null,
@@ -666,12 +695,9 @@ export const LoLBoardGame = {
     // 勝利判定: winnerが設定されていればそれを返す
     if (G.winner) return { winner: G.winner };
     
-    // タワー全滅による勝利（フォールバック）
-    const team0Towers = G.towers.filter(t => t.team === '0').length;
-    const team1Towers = G.towers.filter(t => t.team === '1').length;
-    
-    if (team0Towers === 0) return { winner: '1' };
-    if (team1Towers === 0) return { winner: '0' };
+    // スコアベースの勝利判定（50ポイント到達）
+    if (G.scores['0'] >= VICTORY_SCORE) return { winner: '0' };
+    if (G.scores['1'] >= VICTORY_SCORE) return { winner: '1' };
     
     return undefined;
   },
@@ -728,10 +754,15 @@ function processNextAction(G: GameState, random: any) {
   // ターゲットを事前に決定してアクションに設定
   const card = champion.hand.find(c => c.id === action.cardId);
   if (card) {
-    const { targetPos, targetChampionId, targetTowerId } = selectCPUTarget(G, champion, card, team);
+    const { targetPos, targetChampionId, targetTowerId } = selectCPUTarget(
+      G, 
+      champion, 
+      card, 
+      team, 
+      !!action.isAlternativeMove // isAlternativeMoveフラグを渡す
+    );
     action.targetPos = targetPos;
     action.targetChampionId = targetChampionId;
-    action.targetTowerId = targetTowerId;
   }
   
   // CPUアクションディレイを設定（UIが続行を呼ぶまで待機）
@@ -785,21 +816,11 @@ function resolveCardAction(
         const isOccupied = allChampions.some(c => 
           c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
         );
-        const isTowerPos = G.towers.some(t => 
-          t.pos.x === action.targetPos!.x && t.pos.y === action.targetPos!.y
-        );
-        // 自陣の勝利マスには入れない
-        const isOwnVictory = isOwnVictorySquare(action.targetPos, team);
         
-        if (!isOccupied && !isTowerPos && !isOwnVictory) {
+        if (!isOccupied) {
           champion.pos = action.targetPos;
+          paintTile(G, action.targetPos.x, action.targetPos.y, team);
           G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した（代替アクション）`);
-          
-          // 勝利マス到達チェック
-          if (isVictorySquare(action.targetPos, team, G.towers)) {
-            G.winner = team;
-            G.turnLog.push(`★★★ ${championName} が勝利マスに到達！チーム${team}の勝利！ ★★★`);
-          }
         }
       }
     }
@@ -818,26 +839,42 @@ function resolveCardAction(
   // 移動処理
   if (card.move > 0 && action.targetPos) {
     const dist = getDistance(champion.pos, action.targetPos);
-    if (dist <= card.move) {
+    
+    // 自陣（自チームの色のマス）を通る場合、コスト0として扱うロジックが必要
+    // ここでは簡易的に「マンハッタン距離 - 自陣マスの数 <= move」や
+    // 「経路探索」が必要になるが、一旦は単純な距離判定 + 
+    // 「現在地が自陣ならコスト減少」等の簡易計算、あるいは「自陣ワープ」の実装とする
+    // 
+    // ユーザー要望 A: "カードの移動距離内で、自陣マスは移動距離を消費しない"
+    // これを実現するには経路探索(BFS/Dijkstra)が必要。
+    
+    // 簡易実装: 最短経路上のコストを概算
+    // 本格的な経路探索は計算が重くなる可能性があるが、盤面が13x13なのでBFSで十分可能
+    
+    const moveCost = calculateMoveCost(G, champion.pos, action.targetPos, team);
+    
+    if (moveCost <= card.move) {
       const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
       const isOccupied = allChampions.some(c => 
         c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
       );
-      const isTowerPos = G.towers.some(t => 
-        t.pos.x === action.targetPos!.x && t.pos.y === action.targetPos!.y
-      );
-      // 自陣の勝利マスには入れない
-      const isOwnVictory = isOwnVictorySquare(action.targetPos, team);
       
-      if (!isOccupied && !isTowerPos && !isOwnVictory) {
+      if (!isOccupied) {
+        // 移動経路を塗る（簡易的に移動先と移動元を結ぶ直線を塗る、あるいはBFS経路）
+        // ここでは「移動により通過したとみなされるマス」を塗るべきだが、
+        // ワープ的な移動でなければ「移動先」を塗る
+        
+        const oldPos = { ...champion.pos };
         champion.pos = action.targetPos;
         G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
         
-        // 勝利マス到達チェック
-        if (isVictorySquare(action.targetPos, team, G.towers)) {
-          G.winner = team;
-          G.turnLog.push(`★★★ ${championName} が勝利マスに到達！チーム${team}の勝利！ ★★★`);
-        }
+        // 移動先を塗る
+        paintTile(G, action.targetPos.x, action.targetPos.y, team);
+        
+        // 移動経路塗り（始点と終点の間も塗る必要がある場合）
+        // ユーザー要望: "移動ルートに「ライン」を生成"
+        // 直線補間で塗る
+        paintPath(G, oldPos, action.targetPos, team);
       }
     }
   }
@@ -853,11 +890,19 @@ function resolveCardAction(
   if (card.power > 0) {
     const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
     
+    // 攻撃対象位置（ユニットがいるかどうかに関わらず、攻撃した場所は塗れる？）
+    // ユーザー要望: "攻撃を行うマスにも塗ることができます"
+    
+    // ターゲット指定座標があればそこを塗る
+    let targetPos = action.targetPos;
+    
     // チャンピオンへの攻撃
     if (action.targetChampionId) {
       const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
       
       if (target && target.pos) {
+        targetPos = target.pos; // ターゲットの位置を塗る座標とする
+        
         const dist = getDistance(champion.pos, target.pos);
         
         if (dist <= attackRange) {
@@ -896,6 +941,12 @@ function resolveCardAction(
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
+          // 撃破ポイント
+          if (target.currentHp <= 0) {
+             G.scores[team] += KILL_POINTS;
+             G.turnLog.push(`撃破ボーナス！ +${KILL_POINTS}pt`);
+          }
+
           // ノックバック
           if (card.effectFn === 'knockback' && random.Number() < 0.3 && target.pos) {
             const dx = target.pos.x - champion.pos.x;
@@ -916,75 +967,20 @@ function resolveCardAction(
             G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
           }
           
-          // 撃破チェック
-          if (target.currentHp <= 0) {
-            target.pos = null;
-            target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
-            target.currentHp = 0;
-            G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！`);
-          }
+          // 撃破処理は checkKnockouts で
         } else {
           G.turnLog.push(`${championName} の ${card.nameJa}！ しかし ${getChampionDisplayName(target)} に届かなかった...`);
         }
       }
     }
-    // タワーへの攻撃
-    else if (action.targetTowerId) {
-      const target = G.towers.find(t => t.id === action.targetTowerId);
-      
-      if (target) {
-        const dist = getDistance(champion.pos, target.pos);
-        
-        if (dist <= attackRange) {
-          // タワーへのダメージ計算（タイプ相性あり）
-          const { damage, effectiveness } = calculateDamage(
-            card.power,
-            card.type,
-            champion.currentType,
-            target.type
-          );
-          
-          let finalDamage = damage;
-          
-          // みずしゅりけん等の連続攻撃
-          if (card.effectFn === 'multiHit') {
-            const hits = 2 + Math.floor(random.Number() * 3);
-            finalDamage = finalDamage * hits;
-            G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
-          }
-          
-          target.hp -= finalDamage;
-          
-          // ダメージイベントを追加（アニメーション用）
-          G.damageEvents.push({
-            id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-            targetId: target.id,
-            amount: finalDamage,
-            effectiveness: effectiveness || undefined,
-            timestamp: Date.now(),
-          });
-          
-          let logMsg = `${championName} の ${card.nameJa}！ タワー(${target.id}) に ${finalDamage} ダメージ`;
-          if (effectiveness) logMsg += ` ${effectiveness}`;
-          G.turnLog.push(logMsg);
-          
-          // 反動
-          if (card.effectFn === 'recoil') {
-            const recoilDamage = Math.floor(finalDamage / 3);
-            champion.currentHp -= recoilDamage;
-            G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
-          }
-          
-          // 破壊チェックはチェックノックアウトフェーズで行われるが、ログのためにここでも確認可
-          if (target.hp <= 0) {
-             // 実際の破壊処理は checkKnockouts で一括で行う
-             G.turnLog.push(`タワー(${target.id}) を破壊した！`);
-          }
-        } else {
-          G.turnLog.push(`${championName} の ${card.nameJa}！ しかしタワー(${target.id}) に届かなかった...`);
-        }
-      }
+    
+    // 攻撃によって床を塗る処理
+    if (targetPos) {
+       paintTile(G, targetPos.x, targetPos.y, team);
+       // 範囲攻撃の場合は周囲も塗るなどの拡張が可能だが、一旦単体対象のみ
     }
+    
+    // タワーへの攻撃ロジックは削除
   }
   
   // 交代処理
@@ -1026,7 +1022,75 @@ function resolveCardAction(
   champion.usedCards.push(card);
 }
 
+// ヘルパー関数: 移動コスト計算 (BFS)
+function calculateMoveCost(G: GameState, start: Position, end: Position, team: Team): number {
+  if (start.x === end.x && start.y === end.y) return 0;
 
+  const size = BOARD_SIZE;
+  const visited = Array(size).fill(null).map(() => Array(size).fill(false));
+  const queue: { pos: Position; cost: number }[] = [{ pos: start, cost: 0 }];
+  visited[start.y][start.x] = true;
+
+  const directions = [
+    { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
+  ];
+
+  while (queue.length > 0) {
+    // コストが小さい順に処理したいが、単純なキューでも距離順になるのでOK
+    // ただしコスト重みが異なる（0と1）ので、本当はDijkstraかDequeが必要。
+    // 今回は簡易的に「コスト0マスの移動」を優先的に探索するように配列操作するか、
+    // あるいは単純に全探索して最小コストを見つける
+    
+    // 簡易実装: 配列をソートする（効率は悪いが盤面が小さいのでOK）
+    queue.sort((a, b) => a.cost - b.cost);
+    const { pos, cost } = queue.shift()!;
+
+    if (pos.x === end.x && pos.y === end.y) return cost;
+
+    for (const dir of directions) {
+      const nx = pos.x + dir.dx;
+      const ny = pos.y + dir.dy;
+
+      if (nx >= 0 && nx < size && ny >= 0 && ny < size && !visited[ny][nx]) {
+        // 壁（他ユニット）判定はここでは行わない（すり抜け不可ルールは別途あるが、コスト計算としては最短パスを探す）
+        // ただし敵ユニットがいるマスは通れないとするのが一般的
+        // ここでは「移動力チェック」用なので、障害物は無視して地形コストのみ見る
+        
+        visited[ny][nx] = true;
+        
+        // 自陣ならコスト0、それ以外は1
+        const tileCost = G.territory[ny][nx] === team ? 0 : 1;
+        queue.push({ pos: { x: nx, y: ny }, cost: cost + tileCost });
+      }
+    }
+  }
+  
+  return Infinity; // 到達不能
+}
+
+// ヘルパー関数: 経路塗り (Bresenham's line algorithm or simple interpolation)
+function paintPath(G: GameState, start: Position, end: Position, team: Team) {
+  let x0 = start.x;
+  let y0 = start.y;
+  const x1 = end.x;
+  const y1 = end.y;
+
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = (x0 < x1) ? 1 : -1;
+  const sy = (y0 < y1) ? 1 : -1;
+  let err = dx - dy;
+
+  while(true) {
+    paintTile(G, x0, y0, team);
+    if ((x0 === x1) && (y0 === y1)) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
+
+}
 
 /**
  * 配置が必要かどうかをチェック
@@ -1050,8 +1114,6 @@ function needsDeployPhase(G: GameState): boolean {
  * 解決フェーズ終了
  */
 function finishResolutionPhase(G: GameState, random: any) {
-  // タワーは攻撃しない（壁としてのみ機能）
-  
   // 撃破チェック
   checkKnockouts(G);
   
@@ -1069,14 +1131,16 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.currentPhase++;
     isNewPhase = true;
     refillCards(G);
-    
-    // タワーのタイプを変更
-    G.towers.forEach(tower => {
-      tower.type = ELEMENT_TYPES[Math.floor(random.Number() * ELEMENT_TYPES.length)];
-    });
-    
-    G.turnLog.push(`=== フェイズ${G.currentPhase}開始 (タワー属性変化) ===`);
+    G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
   }
+  
+  // 陣地計算
+  detectAndFillEnclosures(G, '0');
+  detectAndFillEnclosures(G, '1');
+  calculateScores(G);
+  
+  // スコアログ
+  G.turnLog.push(`スコア - 青: ${G.scores['0']}, 赤: ${G.scores['1']}`);
   
   // 状態リセット
   G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
@@ -1105,9 +1169,6 @@ function finishResolutionPhase(G: GameState, random: any) {
   G.turnLog.push('--- ターン終了 ---');
 }
 
-// タワーは攻撃しない - 勝利マスへのアクセスをブロックする壁として機能
-// function resolveTowerAttacks は削除
-
 function checkKnockouts(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
@@ -1119,12 +1180,6 @@ function checkKnockouts(G: GameState) {
       }
     }
   }
-  
-  const destroyedTowers = G.towers.filter(t => t.hp <= 0);
-  for (const tower of destroyedTowers) {
-    G.turnLog.push(`タワー(${tower.id}) が破壊された！`);
-  }
-  G.towers = G.towers.filter(t => t.hp > 0);
 }
 
 function processBenchRecovery(G: GameState) {

@@ -1,4 +1,5 @@
 export type Team = '0' | '1';
+export type TerritoryOwner = Team | null; // 陣地の所有者（nullは未塗り）
 export type UnitType = 'champion';
 
 // ポケモン風の属性タイプ
@@ -125,13 +126,16 @@ export interface DamageEvent {
 
 export interface GameState {
   players: Record<Team, PlayerState>;
-  towers: Tower[];
   currentPhase: number;    // 現在のフェイズ（4ターンで1フェイズ）
   turnInPhase: number;     // フェイズ内のターン数（1-4）
   turnActions: Record<Team, TurnAction>;
   turnLog: string[];
   gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ
   winner: Team | null;
+  
+  // 陣取り用
+  territory: TerritoryOwner[][]; // 13x13の陣地マップ
+  scores: Record<Team, number>;   // 各チームのスコア（現在の陣地面積）
   
   // 解決フェーズ用
   pendingActions: PendingAction[];  // 解決待ち行動キュー（優先度順）
