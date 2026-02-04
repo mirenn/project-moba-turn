@@ -36,6 +36,14 @@ function isAdminDomain(x: number, y: number): boolean {
 // 陣地を塗る
 export function paintTile(G: GameState, x: number, y: number, team: Team): void {
   if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return;
+  
+  // ホームマスチェック：相手のホームマスは塗れない
+  const enemyTeam = team === '0' ? '1' : '0';
+  const isEnemyHomeSquare = G.homeSquares[enemyTeam].some(
+    pos => pos.x === x && pos.y === y
+  );
+  if (isEnemyHomeSquare) return; // 相手のホームマスは保護
+  
   G.territory[y][x] = team;
 }
 
@@ -94,7 +102,7 @@ function spawnPointTokens(G: GameState, random: any): void {
   }
 }
 
-// 接続されていない陣地を消去（3マス以上連結していない色は消える）
+// 接続されていない陣地を消去（4マス以上連結していない色は消える、ただしホームマス接続は除外）
 function removeDisconnectedTerritories(G: GameState): void {
   const directions = [
     { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
@@ -113,10 +121,16 @@ function removeDisconnectedTerritories(G: GameState): void {
           const component: Position[] = [];
           const queue: Position[] = [{ x, y }];
           visited[y][x] = true;
+          let hasHomeSquare = false; // ホームマスを含むかどうか
           
           while (queue.length > 0) {
             const pos = queue.shift()!;
             component.push(pos);
+            
+            // ホームマスかどうかチェック
+            if (G.homeSquares[team].some(hs => hs.x === pos.x && hs.y === pos.y)) {
+              hasHomeSquare = true;
+            }
             
             for (const dir of directions) {
               const nx = pos.x + dir.dx;
@@ -132,8 +146,9 @@ function removeDisconnectedTerritories(G: GameState): void {
             }
           }
           
-          // 3マス未満の連結成分を消去
-          if (component.length < 3) {
+          // ホームマスに接続している場合は消滅しない
+          // そうでなければ4マス未満の連結成分を消去
+          if (!hasHomeSquare && component.length < 4) {
             for (const pos of component) {
               G.territory[pos.y][pos.x] = null;
             }
@@ -260,6 +275,14 @@ function autoCPUDeploy(G: GameState): void {
   
   if (bestPos) {
     undeployedChampion.pos = { x: bestPos.x, y: bestPos.y };
+    
+    // ホームマス登録（CPU チームの初回配置フェーズの3体まで）
+    if (G.homeSquares[cpuTeam].length < 3) {
+      G.homeSquares[cpuTeam].push({ x: bestPos.x, y: bestPos.y });
+      paintTile(G, bestPos.x, bestPos.y, cpuTeam);
+      G.turnLog.push(`(${bestPos.x}, ${bestPos.y}) がホームマスとして登録されました`);
+    }
+    
     G.turnLog.push(`${getChampionDisplayName(undeployedChampion)} を (${bestPos.x}, ${bestPos.y}) に配置しました`);
   }
 }
@@ -590,6 +613,10 @@ const commonMoves = {
       const team = playerID as Team;
       const player = G.players[team];
       
+      // 3体制限チェック
+      const deployedCount = player.champions.filter(c => c.pos !== null).length;
+      if (deployedCount >= CHAMPIONS_ON_FIELD) return; // 既に3体フィールドにいる
+      
       const champion = player.champions.find(c => c.id === championId);
       if (!champion) return;
       if (champion.pos !== null) return; // 既に配置済み
@@ -610,6 +637,16 @@ const commonMoves = {
       
       // 配置実行
       champion.pos = { x, y };
+      
+      // ホームマス登録（初回配置フェーズの3体まで）
+      // G.currentPhase === 1 かつ G.turnInPhase === 1（ゲーム開始直後）の間に配置された場所をホームマスとする
+      // より簡易に：homeSquaresが3マス未満の間は登録
+      if (G.homeSquares[team].length < 3) {
+        G.homeSquares[team].push({ x, y });
+        paintTile(G, x, y, team);
+        G.turnLog.push(`(${x}, ${y}) がホームマスとして登録されました`);
+      }
+      
       G.turnLog.push(`${getChampionDisplayName(champion)} を (${x}, ${y}) に配置しました`);
       
       // 手番を交代
@@ -621,6 +658,22 @@ const commonMoves = {
         autoCPUDeploy(G);
         // CPUが配置したら再度プレイヤーの番に戻す
         G.deployTurn = '0';
+      }
+      
+      // 配置完了チェック（mainフェーズ中の配置用）
+      const team0Deployed = G.players['0'].champions.filter(c => c.pos !== null).length;
+      const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
+      const team0Ready = team0Deployed >= CHAMPIONS_ON_FIELD || G.players['0'].champions.every(c => 
+        c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
+      );
+      const team1Ready = team1Deployed >= CHAMPIONS_ON_FIELD || G.players['1'].champions.every(c => 
+        c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
+      );
+      
+      if (team0Ready && team1Ready) {
+        // 配置完了 → 計画フェーズへ
+        G.gamePhase = 'planning';
+        G.turnLog.push('--- 配置完了: 計画フェーズ開始 ---');
       }
       
       events.endTurn({ next: G.deployTurn });
@@ -670,6 +723,7 @@ export const LoLBoardGame = {
       awaitingTargetSelection: false,
       damageEvents: [],
       cpuActionDelay: 0,
+      homeSquares: { '0': [], '1': [] },
     };
   },
 

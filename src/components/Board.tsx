@@ -539,7 +539,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               // 解決フェーズのハイライト
               const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
               const isAttackTarget = validAttackTargets.some(t => t.pos && t.pos.x === x && t.pos.y === y);
-              const isResolvingChamp = resolvingChampion?.id === champion?.id;
+              const isResolvingChamp = resolvingChampion && champion && resolvingChampion.id === champion.id;
 
               // 配置フェーズのハイライト
               const isSpawnable = spawnablePositions.some(p => p.x === x && p.y === y);
@@ -603,8 +603,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                       <div
                         key={`point-${idx}`}
                         className={`absolute z-20 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${token.value >= 5
-                            ? 'bg-red-500 text-white animate-pulse ring-2 ring-red-300'
-                            : 'bg-yellow-400 text-black'
+                          ? 'bg-red-500 text-white animate-pulse ring-2 ring-red-300'
+                          : 'bg-yellow-400 text-black'
                           }`}
                         style={{ top: '2px', left: '2px' }}
                         title={`${token.value}pt`}

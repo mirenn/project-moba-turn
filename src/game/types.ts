@@ -158,6 +158,9 @@ export interface GameState {
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー
   cpuActionDelay: number;       // CPUアクション実行中のディレイトークン（0=無効、>0=ディレイ中）
+  
+  // ホームマス（最初のチャンピオン配置マス、永続的に保護される）
+  homeSquares: Record<Team, Position[]>;
 }
 
 // 旧型との互換性のため（移行期間中）
