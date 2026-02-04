@@ -124,6 +124,13 @@ export interface DamageEvent {
   timestamp: number;    // 発生時刻
 }
 
+// ポイントトークン（ランダムに発生し、陣地上にあればターン終了時に獲得）
+export interface PointToken {
+  x: number;
+  y: number;
+  value: number;        // 1 = 通常, 5 = 高価値（赤ポイント）
+}
+
 export interface GameState {
   players: Record<Team, PlayerState>;
   currentPhase: number;    // 現在のフェイズ（4ターンで1フェイズ）
@@ -135,7 +142,10 @@ export interface GameState {
   
   // 陣取り用
   territory: TerritoryOwner[][]; // 13x13の陣地マップ
-  scores: Record<Team, number>;   // 各チームのスコア（現在の陣地面積）
+  scores: Record<Team, number>;   // 各チームのスコア（累積獲得ポイント）
+  
+  // ポイントトークン用
+  pointTokens: PointToken[];      // ボード上のポイントトークン
   
   // 解決フェーズ用
   pendingActions: PendingAction[];  // 解決待ち行動キュー（優先度順）

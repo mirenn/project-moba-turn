@@ -596,6 +596,24 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
                   <span className="absolute bottom-0 right-0.5 text-[8px] text-slate-500">{x},{y}</span>
 
+                  {/* ポイントトークン表示 */}
+                  {G.pointTokens
+                    ?.filter(t => t.x === x && t.y === y)
+                    .map((token, idx) => (
+                      <div
+                        key={`point-${idx}`}
+                        className={`absolute z-20 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${token.value >= 5
+                            ? 'bg-red-500 text-white animate-pulse ring-2 ring-red-300'
+                            : 'bg-yellow-400 text-black'
+                          }`}
+                        style={{ top: '2px', left: '2px' }}
+                        title={`${token.value}pt`}
+                      >
+                        {token.value}
+                      </div>
+                    ))
+                  }
+
                   {/* ダメージポップアップ */}
                   {visibleDamageEvents
                     .filter(e => e.x === x && e.y === y)

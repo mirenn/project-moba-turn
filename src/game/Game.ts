@@ -11,7 +11,8 @@ import {
   TurnAction,
   Card,
   PendingAction,
-  ElementType
+  ElementType,
+  PointToken
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
@@ -55,76 +56,110 @@ export function calculateScores(G: GameState): void {
   G.scores = scores;
 }
 
-// Flood-fill で囲まれた領域を検出して塗りつぶす
+// Flood-fill で囲まれた領域を検出して塗りつぶす（廃止：呼び出されない）
 // 盤面の端は自色と同じ扱い
 export function detectAndFillEnclosures(G: GameState, team: Team): void {
-  const size = BOARD_SIZE;
-  const territory = G.territory;
+  // 囲い塗りルールは廃止されました
+  // この関数は互換性のために残していますが、呼び出されません
+}
+
+// ポイントトークンを生成（ターン終了時に呼び出し）
+function spawnPointTokens(G: GameState, random: any): void {
+  // 1~3個のポイントをランダムに生成
+  const numTokens = 1 + Math.floor(random.Number() * 3);
   
-  // 盤外からアクセス可能な（囲まれていない）マスを特定
-  // 自チームのマスまたは盤面の端は「壁」として扱う
-  const visited: boolean[][] = Array(size).fill(null).map(() => Array(size).fill(false));
-  const reachableFromEdge: boolean[][] = Array(size).fill(null).map(() => Array(size).fill(false));
-  
-  // BFSで盤面の端から到達可能なマスを探索
-  const queue: Position[] = [];
-  
-  // 盤面の4辺から開始点を追加（自分の領域でないマス）
-  for (let i = 0; i < size; i++) {
-    // 上端 (y=0)
-    if (territory[0][i] !== team) {
-      queue.push({ x: i, y: 0 });
-      reachableFromEdge[0][i] = true;
-    }
-    // 下端 (y=size-1)
-    if (territory[size - 1][i] !== team) {
-      queue.push({ x: i, y: size - 1 });
-      reachableFromEdge[size - 1][i] = true;
-    }
-    // 左端 (x=0)
-    if (territory[i][0] !== team) {
-      queue.push({ x: 0, y: i });
-      reachableFromEdge[i][0] = true;
-    }
-    // 右端 (x=size-1)
-    if (territory[i][size - 1] !== team) {
-      queue.push({ x: size - 1, y: i });
-      reachableFromEdge[i][size - 1] = true;
+  for (let i = 0; i < numTokens; i++) {
+    let x: number, y: number, attempts = 0;
+    do {
+      x = Math.floor(random.Number() * BOARD_SIZE);
+      y = Math.floor(random.Number() * BOARD_SIZE);
+      attempts++;
+    } while (
+      G.pointTokens.some(t => t.x === x && t.y === y) && 
+      attempts < 50
+    );
+    
+    if (attempts < 50) {
+      // 中央エリア(Admin Domain)は高価値ポイント（5pt）が出やすい
+      const isCenter = isAdminDomain(x, y);
+      const isHighValue = isCenter ? random.Number() < 0.6 : random.Number() < 0.1;
+      
+      G.pointTokens.push({
+        x, y,
+        value: isHighValue ? 5 : 1
+      });
+      
+      G.turnLog.push(`ポイントトークン(${isHighValue ? '5pt' : '1pt'})が (${x}, ${y}) に出現！`);
     }
   }
-  
-  // BFS: 自チームの領域を通らずに盤面端から到達可能なマスを探索
+}
+
+// 接続されていない陣地を消去（3マス以上連結していない色は消える）
+function removeDisconnectedTerritories(G: GameState): void {
   const directions = [
-    { dx: 0, dy: -1 }, // 上
-    { dx: 0, dy: 1 },  // 下
-    { dx: -1, dy: 0 }, // 左
-    { dx: 1, dy: 0 },  // 右
+    { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
   ];
   
-  while (queue.length > 0) {
-    const pos = queue.shift()!;
+  for (const team of ['0', '1'] as Team[]) {
+    const visited: boolean[][] = Array(BOARD_SIZE)
+      .fill(null)
+      .map(() => Array(BOARD_SIZE).fill(false));
     
-    for (const dir of directions) {
-      const nx = pos.x + dir.dx;
-      const ny = pos.y + dir.dy;
-      
-      if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue;
-      if (reachableFromEdge[ny][nx]) continue;
-      if (territory[ny][nx] === team) continue; // 自チームのマスは壁
-      
-      reachableFromEdge[ny][nx] = true;
-      queue.push({ x: nx, y: ny });
-    }
-  }
-  
-  // 盤面端から到達不可能なマス = 囲まれている → 塗りつぶす
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (!reachableFromEdge[y][x] && territory[y][x] !== team) {
-        territory[y][x] = team;
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      for (let x = 0; x < BOARD_SIZE; x++) {
+        if (G.territory[y][x] === team && !visited[y][x]) {
+          // BFSで連結成分を探索
+          const component: Position[] = [];
+          const queue: Position[] = [{ x, y }];
+          visited[y][x] = true;
+          
+          while (queue.length > 0) {
+            const pos = queue.shift()!;
+            component.push(pos);
+            
+            for (const dir of directions) {
+              const nx = pos.x + dir.dx;
+              const ny = pos.y + dir.dy;
+              
+              if (nx >= 0 && nx < BOARD_SIZE && 
+                  ny >= 0 && ny < BOARD_SIZE &&
+                  !visited[ny][nx] && 
+                  G.territory[ny][nx] === team) {
+                visited[ny][nx] = true;
+                queue.push({ x: nx, y: ny });
+              }
+            }
+          }
+          
+          // 3マス未満の連結成分を消去
+          if (component.length < 3) {
+            for (const pos of component) {
+              G.territory[pos.y][pos.x] = null;
+            }
+            G.turnLog.push(`${team === '0' ? '青' : '赤'}チームの陣地(${component.length}マス)が接続不足で消滅...`);
+          }
+        }
       }
     }
   }
+}
+
+// 塗られた陣地上のポイントトークンを獲得
+function collectPointsFromTerritory(G: GameState): void {
+  const collectedTokens: PointToken[] = [];
+  
+  for (const token of G.pointTokens) {
+    const owner = G.territory[token.y][token.x];
+    if (owner !== null) {
+      G.scores[owner] += token.value;
+      collectedTokens.push(token);
+      G.turnLog.push(`${owner === '0' ? '青' : '赤'}チームが ${token.value}pt 獲得！(${token.x}, ${token.y})`);
+    }
+  }
+  
+  // 獲得したトークンを削除
+  G.pointTokens = G.pointTokens.filter(t => !collectedTokens.includes(t));
 }
 
 function getDistance(p1: Position, p2: Position): number {
@@ -209,9 +244,9 @@ function autoCPUDeploy(G: GameState): void {
   const cpuTeam: Team = '1';
   const cpuPlayer = G.players[cpuTeam];
   
-  // まだ配置されていないチャンピオン（ノックアウトされていない）
+  // まだ配置されていないチャンピオン（ノックアウトされていない、HP > 0）
   const undeployedChampion = cpuPlayer.champions.find(c => 
-    c.pos === null && c.knockoutTurnsRemaining === 0
+    c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
   );
   
   if (!undeployedChampion) return; // 配置可能なチャンピオンがいない
@@ -613,13 +648,20 @@ export const LoLBoardGame = {
       players,
       territory,
       scores: { '0': 0, '1': 0 },
+      pointTokens: [],  // ポイントトークン初期化
       currentPhase: 1,
       turnInPhase: 1,
       turnActions: { 
         '0': { actions: [] }, 
         '1': { actions: [] } 
       },
-      turnLog: ['ゲーム開始 - 13×13ボード（陣取りモード）', '【ルール】先に50ポイント到達で勝利！', 'まずはチャンピオンを配置してください'],
+      turnLog: [
+        'ゲーム開始 - 13×13ボード（陣取りモード）', 
+        '【ルール】先に50ポイント到達で勝利！',
+        '【新ルール】ポイントトークンを集めよう！',
+        '【注意】3マス未満の陣地は消滅します',
+        'まずはチャンピオンを配置してください'
+      ],
       gamePhase: 'deploy',
       deployTurn: '0',
       winner: null,
@@ -654,8 +696,32 @@ export const LoLBoardGame = {
         // 「出撃可能なチャンピオン(knockoutTurns=0)で、まだFieldにいないもの」を出し切るまで、あるいはFieldが3体になるまで
         
         // 簡易判定: Field上限(3)に達しているか、または出せる駒がもうない
-        const team0Ready = team0Deployed >= 3 || G.players['0'].champions.every(c => c.pos !== null || c.knockoutTurnsRemaining > 0);
-        const team1Ready = team1Deployed >= 3 || G.players['1'].champions.every(c => c.pos !== null || c.knockoutTurnsRemaining > 0);
+        // HP 0のチャンピオンは配置不可として扱う
+        const team0Ready = team0Deployed >= 3 || G.players['0'].champions.every(c => 
+          c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
+        );
+        const team1Ready = team1Deployed >= 3 || G.players['1'].champions.every(c => 
+          c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
+        );
+        
+        console.log('[DEBUG] Deploy endIf check:', {
+          team0Deployed,
+          team1Deployed,
+          team0Ready,
+          team1Ready,
+          team0Champions: G.players['0'].champions.map(c => ({
+            id: c.definitionId,
+            pos: c.pos,
+            hp: c.currentHp,
+            knockout: c.knockoutTurnsRemaining
+          })),
+          team1Champions: G.players['1'].champions.map(c => ({
+            id: c.definitionId,
+            pos: c.pos,
+            hp: c.currentHp,
+            knockout: c.knockoutTurnsRemaining
+          }))
+        });
         
         return team0Ready && team1Ready;
       },
@@ -666,7 +732,8 @@ export const LoLBoardGame = {
     },
     main: {
       moves: {
-        ...commonMoves
+        ...commonMoves,
+        deployChampion: commonMoves.deployChampion,
       }
     }
   },
@@ -1100,7 +1167,7 @@ function needsDeployPhase(G: GameState): boolean {
   for (const team of ['0', '1'] as Team[]) {
     const deployedCount = G.players[team].champions.filter(c => c.pos !== null).length;
     const canDeployMore = G.players[team].champions.some(c => 
-      c.pos === null && c.knockoutTurnsRemaining === 0
+      c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
     );
     // 3体未満で、かつ配置可能なチャンピオンがいる
     if (deployedCount < CHAMPIONS_ON_FIELD && canDeployMore) {
@@ -1123,6 +1190,23 @@ function finishResolutionPhase(G: GameState, random: any) {
   // 撃破カウントダウン
   processKnockoutCountdown(G);
   
+  // ★ 新ルール: 接続チェック - 3マス未満の連結成分を消去
+  removeDisconnectedTerritories(G);
+  
+  // ★ 新ルール: ポイント獲得 - 陣地上のトークンを回収
+  collectPointsFromTerritory(G);
+  
+  // ★ 旧ルール削除: 囲い塗りは廃止
+  // detectAndFillEnclosures(G, '0');
+  // detectAndFillEnclosures(G, '1');
+  // calculateScores(G);  // スコアはポイント獲得ベースに変更
+  
+  // スコアログ
+  G.turnLog.push(`スコア - 青: ${G.scores['0']}pt, 赤: ${G.scores['1']}pt`);
+  
+  // ★ 新ルール: ポイントトークン生成
+  spawnPointTokens(G, random);
+  
   // ターン/フェイズ進行
   G.turnInPhase++;
   let isNewPhase = false;
@@ -1133,14 +1217,6 @@ function finishResolutionPhase(G: GameState, random: any) {
     refillCards(G);
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
   }
-  
-  // 陣地計算
-  detectAndFillEnclosures(G, '0');
-  detectAndFillEnclosures(G, '1');
-  calculateScores(G);
-  
-  // スコアログ
-  G.turnLog.push(`スコア - 青: ${G.scores['0']}, 赤: ${G.scores['1']}`);
   
   // 状態リセット
   G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
@@ -1155,6 +1231,8 @@ function finishResolutionPhase(G: GameState, random: any) {
     }
   }
   
+  G.turnLog.push('--- ターン終了 ---');
+  
   // 4ターンに1回（フェーズ開始時）のみ配置フェーズに移行
   // ただし、配置が必要な場合（3体未満のチームがある場合）のみ
   if (isNewPhase && needsDeployPhase(G)) {
@@ -1165,8 +1243,6 @@ function finishResolutionPhase(G: GameState, random: any) {
     // 配置不要なら計画フェーズへ
     G.gamePhase = 'planning';
   }
-  
-  G.turnLog.push('--- ターン終了 ---');
 }
 
 function checkKnockouts(G: GameState) {
