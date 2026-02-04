@@ -561,8 +561,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   onClick={() => handleCellClick(x, y)}
                 >
                   {/* 陣地カラー表示 */}
-                  {territoryOwner === '0' && <div className="absolute inset-0 bg-blue-900/40 pointer-events-none"></div>}
-                  {territoryOwner === '1' && <div className="absolute inset-0 bg-red-900/40 pointer-events-none"></div>}
+                  {territoryOwner === '0' && <div className="absolute inset-0 bg-blue-700/70 pointer-events-none"></div>}
+                  {territoryOwner === '1' && <div className="absolute inset-0 bg-red-700/70 pointer-events-none"></div>}
 
                   {/* Admin Domain (中央3x3) ハイライト */}
                   {x >= 5 && x <= 7 && y >= 5 && y <= 7 && (
