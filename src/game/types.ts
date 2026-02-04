@@ -131,6 +131,13 @@ export interface PointToken {
   value: number;        // 1 = 通常, 5 = 高価値（赤ポイント）
 }
 
+// 予告ポイントトークン（次ターンで実体化する）
+export interface PendingPointToken {
+  x: number;
+  y: number;
+  value: number;        // 1 = 通常, 5 = 高価値（赤ポイント）
+}
+
 export interface GameState {
   players: Record<Team, PlayerState>;
   currentPhase: number;    // 現在のフェイズ（4ターンで1フェイズ）
@@ -146,6 +153,7 @@ export interface GameState {
   
   // ポイントトークン用
   pointTokens: PointToken[];      // ボード上のポイントトークン
+  pendingPointTokens: PendingPointToken[];  // 予告トークン（次ターンで実体化）
   
   // 解決フェーズ用
   pendingActions: PendingAction[];  // 解決待ち行動キュー（優先度順）

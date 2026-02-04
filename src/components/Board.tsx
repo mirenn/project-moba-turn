@@ -614,6 +614,24 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     ))
                   }
 
+                  {/* 予告ポイントトークン表示（次ターンで出現予定） */}
+                  {G.pendingPointTokens
+                    ?.filter(t => t.x === x && t.y === y)
+                    .map((token, idx) => (
+                      <div
+                        key={`pending-point-${idx}`}
+                        className={`absolute z-20 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow-lg opacity-50 animate-pulse border-2 border-dashed ${token.value >= 5
+                            ? 'bg-red-500/50 text-white border-red-300'
+                            : 'bg-yellow-400/50 text-black border-yellow-600'
+                          }`}
+                        style={{ top: '2px', left: '2px' }}
+                        title={`次ターン: ${token.value}pt 出現予定`}
+                      >
+                        ?
+                      </div>
+                    ))
+                  }
+
                   {/* ダメージポップアップ */}
                   {visibleDamageEvents
                     .filter(e => e.x === x && e.y === y)

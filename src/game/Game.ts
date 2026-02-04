@@ -12,7 +12,8 @@ import {
   Card,
   PendingAction,
   ElementType,
-  PointToken
+  PointToken,
+  PendingPointToken
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
@@ -73,7 +74,18 @@ export function detectAndFillEnclosures(G: GameState, team: Team): void {
 
 // ポイントトークンを生成（ターン終了時に呼び出し）
 function spawnPointTokens(G: GameState, random: any): void {
-  // 1~3個のポイントをランダムに生成
+  // 1. 予告トークンを実体化（前ターンで予告されたもの）
+  for (const pending of G.pendingPointTokens) {
+    G.pointTokens.push({
+      x: pending.x,
+      y: pending.y,
+      value: pending.value
+    });
+    G.turnLog.push(`ポイントトークン(${pending.value}pt)が (${pending.x}, ${pending.y}) に出現！`);
+  }
+  G.pendingPointTokens = [];
+
+  // 2. 新しい予告トークンを生成（1~3個）
   const numTokens = 1 + Math.floor(random.Number() * 3);
   
   for (let i = 0; i < numTokens; i++) {
@@ -83,7 +95,8 @@ function spawnPointTokens(G: GameState, random: any): void {
       y = Math.floor(random.Number() * BOARD_SIZE);
       attempts++;
     } while (
-      G.pointTokens.some(t => t.x === x && t.y === y) && 
+      (G.pointTokens.some(t => t.x === x && t.y === y) ||
+       G.pendingPointTokens.some(t => t.x === x && t.y === y)) && 
       attempts < 50
     );
     
@@ -92,12 +105,12 @@ function spawnPointTokens(G: GameState, random: any): void {
       const isCenter = isAdminDomain(x, y);
       const isHighValue = isCenter ? random.Number() < 0.6 : random.Number() < 0.1;
       
-      G.pointTokens.push({
+      G.pendingPointTokens.push({
         x, y,
         value: isHighValue ? 5 : 1
       });
       
-      G.turnLog.push(`ポイントトークン(${isHighValue ? '5pt' : '1pt'})が (${x}, ${y}) に出現！`);
+      G.turnLog.push(`💫 ポイント予告: (${x}, ${y}) に ${isHighValue ? '5pt' : '1pt'} が次ターン出現予定`);
     }
   }
 }
@@ -702,6 +715,7 @@ export const LoLBoardGame = {
       territory,
       scores: { '0': 0, '1': 0 },
       pointTokens: [],  // ポイントトークン初期化
+      pendingPointTokens: [],  // 予告トークン初期化
       currentPhase: 1,
       turnInPhase: 1,
       turnActions: { 
