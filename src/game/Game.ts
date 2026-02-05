@@ -28,7 +28,7 @@ const CHAMPIONS_ON_FIELD = 3;
 const VICTORY_SCORE = 50;
 const ADMIN_DOMAIN_POINTS = 5; // 中央マスのポイント
 const KILL_POINTS = 5; // 撃破ポイント
-const DEPLOY_MIN_DISTANCE = 2; // 配置時の最低距離制約
+const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
 
 // Admin Domain: 中央3x3 (5,5) ~ (7,7)
 function isAdminDomain(x: number, y: number): boolean {

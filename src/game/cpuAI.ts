@@ -79,7 +79,7 @@ function isAdminDomain(x: number, y: number): boolean {
   return x >= 5 && x <= 7 && y >= 5 && y <= 7;
 }
 
-const DEPLOY_MIN_DISTANCE = 2; // 配置時の最低距離制約
+const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
 
 function getSpawnPositions(): Position[] {
   // 全盤面配置可能（中央3x3のAdmin Domainを除く）
