@@ -85,14 +85,22 @@ function spawnPointTokens(G: GameState, random: any): void {
   }
   G.pendingPointTokens = [];
 
-  // 2. 新しい予告トークンを生成（1~3個）
-  const numTokens = 1 + Math.floor(random.Number() * 3);
+  // 2. 新しい予告トークンを生成（2~4個）- 5~10ターンで決着がつくよう増量
+  const numTokens = 2 + Math.floor(random.Number() * 3);
   
   for (let i = 0; i < numTokens; i++) {
     let x: number, y: number, attempts = 0;
     do {
-      x = Math.floor(random.Number() * BOARD_SIZE);
-      y = Math.floor(random.Number() * BOARD_SIZE);
+      // 中央エリア(Admin Domain: 5-7, 5-7)に50%の確率で出現
+      if (random.Number() < 0.5) {
+        // 中央3x3エリアに配置
+        x = 5 + Math.floor(random.Number() * 3);
+        y = 5 + Math.floor(random.Number() * 3);
+      } else {
+        // ランダム配置
+        x = Math.floor(random.Number() * BOARD_SIZE);
+        y = Math.floor(random.Number() * BOARD_SIZE);
+      }
       attempts++;
     } while (
       (G.pointTokens.some(t => t.x === x && t.y === y) ||
@@ -101,9 +109,10 @@ function spawnPointTokens(G: GameState, random: any): void {
     );
     
     if (attempts < 50) {
-      // 中央エリア(Admin Domain)は高価値ポイント（5pt）が出やすい
+      // 中央エリア(Admin Domain)は高価値ポイント（5pt）が非常に出やすい
       const isCenter = isAdminDomain(x, y);
-      const isHighValue = isCenter ? random.Number() < 0.6 : random.Number() < 0.1;
+      // 中央: 80%で5pt、それ以外: 20%で5pt
+      const isHighValue = isCenter ? random.Number() < 0.8 : random.Number() < 0.2;
       
       G.pendingPointTokens.push({
         x, y,
@@ -717,12 +726,28 @@ export const LoLBoardGame = {
       '1': initializePlayerState('1', team1Champions),
     };
 
+    // ゲーム開始時に中央エリアに初期ポイントトークン（予告）を配置
+    const initialPendingTokens: PendingPointToken[] = [];
+    const centerPositions = [
+      { x: 5, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 6 }, 
+      { x: 6, y: 7 }, { x: 7, y: 6 }
+    ];
+    // ランダムに3箇所選んで5ptトークンを配置
+    const shuffled = [...centerPositions].sort(() => random.Number() - 0.5);
+    for (let i = 0; i < 3; i++) {
+      initialPendingTokens.push({
+        x: shuffled[i].x,
+        y: shuffled[i].y,
+        value: 5
+      });
+    }
+
     return {
       players,
       territory,
       scores: { '0': 0, '1': 0 },
       pointTokens: [],  // ポイントトークン初期化
-      pendingPointTokens: [],  // 予告トークン初期化
+      pendingPointTokens: initialPendingTokens,  // 初期予告トークン（中央に5pt×3）
       currentPhase: 1,
       turnInPhase: 1,
       turnActions: { 
