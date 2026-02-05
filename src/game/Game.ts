@@ -971,14 +971,13 @@ function resolveCardAction(
   
   const enemyTeam = team === '0' ? '1' : '0';
   
-  // 代替アクション: 1マス移動のみ（上下左右）
+  // 代替アクション: 2マス移動（マンハッタン距離2以内）
   if (action.isAlternativeMove) {
     if (action.targetPos) {
-      const dx = action.targetPos.x - champion.pos.x;
-      const dy = action.targetPos.y - champion.pos.y;
-      const isOrthogonal = (Math.abs(dx) <= 1 && dy === 0) || (dx === 0 && Math.abs(dy) <= 1);
+      const dist = Math.abs(action.targetPos.x - champion.pos.x) + Math.abs(action.targetPos.y - champion.pos.y);
+      const isWithinRange = dist >= 1 && dist <= 2;
       
-      if (isOrthogonal) {
+      if (isWithinRange) {
         const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
         const isOccupied = allChampions.some(c => 
           c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y

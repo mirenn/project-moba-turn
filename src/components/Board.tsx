@@ -146,26 +146,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const getValidMoveTargets = (): Position[] => {
     if (!resolvingChampion || !resolvingChampion.pos) return [];
 
-    // 代替アクションの場合: 1マス（上下左右のみ）
+    // 代替アクションの場合: 2マス（マンハッタン距離2以内）
     if (isAlternativeMove) {
       const positions: Position[] = [];
       const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-      const orthogonalDirs = [
-        { dx: 1, dy: 0 },
-        { dx: -1, dy: 0 },
-        { dx: 0, dy: 1 },
-        { dx: 0, dy: -1 },
-      ];
 
-      for (const dir of orthogonalDirs) {
-        const x = resolvingChampion.pos.x + dir.dx;
-        const y = resolvingChampion.pos.y + dir.dy;
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
+          const dist = Math.abs(dx) + Math.abs(dy);
+          if (dist >= 1 && dist <= 2) {
+            const x = resolvingChampion.pos.x + dx;
+            const y = resolvingChampion.pos.y + dy;
 
-        if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) continue;
+            if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) continue;
 
-        const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
-        if (!isOccupied) {
-          positions.push({ x, y });
+            const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
+            if (!isOccupied) {
+              positions.push({ x, y });
+            }
+          }
         }
       }
       return positions;
@@ -411,7 +410,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
           <div className="flex gap-2 text-xs text-slate-300 justify-center mb-3">
             {isAlternativeMove ? (
-              <span className="flex items-center gap-1"><Move size={12} /> 移動: 1マス（上下左右のみ）</span>
+              <span className="flex items-center gap-1"><Move size={12} /> 移動: 2マス</span>
             ) : (
               <>
                 {resolvingCard && resolvingCard.move > 0 && (
@@ -425,7 +424,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
           <div className="text-xs text-slate-400 mb-2">
             {isAlternativeMove
-              ? '緑のマスをクリックして移動先を選択（上下左右1マス）'
+              ? '緑のマスをクリックして移動先を選択（2マス以内）'
               : (resolvingCard && resolvingCard.isSwap
                 ? 'ベンチのチャンピオンをクリックして交代対象を選択'
                 : (resolvingCard && resolvingCard.move > 0
@@ -765,7 +764,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         ) : isAltMove ? (
                           <div className="flex items-center gap-1 mt-1">
                             <Move size={12} className="text-green-400" />
-                            <span className="text-xs text-green-300">汎用移動（1マス）</span>
+                            <span className="text-xs text-green-300">汎用移動（2マス）</span>
                           </div>
                         ) : card && (
                           <div className="flex items-center gap-1 mt-1">
@@ -803,7 +802,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         ) : isAltMove ? (
                           <div className="flex items-center gap-1 mt-1">
                             <Move size={12} className="text-green-400" />
-                            <span className="text-xs text-green-300">汎用移動（1マス）</span>
+                            <span className="text-xs text-green-300">汎用移動（2マス）</span>
                           </div>
                         ) : card && (
                           <div className="flex items-center gap-1 mt-1">
