@@ -159,9 +159,16 @@ function removeDisconnectedTerritories(G: GameState): void {
             }
           }
           
-          // ホームマスに接続している場合は消滅しない
+          // チャンピオンがいるマスかどうかチェック
+          const hasChampion = component.some(pos => 
+            G.players[team].champions.some(c => 
+              c.pos !== null && c.pos.x === pos.x && c.pos.y === pos.y
+            )
+          );
+          
+          // ホームマスまたはチャンピオンに接続している場合は消滅しない
           // そうでなければ4マス未満の連結成分を消去
-          if (!hasHomeSquare && component.length < 4) {
+          if (!hasHomeSquare && !hasChampion && component.length < 4) {
             for (const pos of component) {
               G.territory[pos.y][pos.x] = null;
             }
@@ -1076,13 +1083,16 @@ function resolveCardAction(
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
-          // 撃破ポイント
+          // 撃破処理（即時）- HPが0以下になったら即座に盤面から消す
           if (target.currentHp <= 0) {
+             target.pos = null;
+             target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
+             target.currentHp = 0;
              G.scores[team] += KILL_POINTS;
-             G.turnLog.push(`撃破ボーナス！ +${KILL_POINTS}pt`);
+             G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt`);
           }
 
-          // ノックバック
+          // ノックバック（撃破されていない場合のみ）
           if (card.effectFn === 'knockback' && random.Number() < 0.3 && target.pos) {
             const dx = target.pos.x - champion.pos.x;
             const dy = target.pos.y - champion.pos.y;
@@ -1313,6 +1323,11 @@ function finishResolutionPhase(G: GameState, random: any) {
   }
 }
 
+/**
+ * 撃破チェック（フォールバック処理）
+ * - 通常の攻撃による撃破はresolveCardAction内で即時処理される
+ * - この関数は反動ダメージ等で撃破された場合を拾うためのもの
+ */
 function checkKnockouts(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {

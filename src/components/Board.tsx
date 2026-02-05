@@ -344,7 +344,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   };
 
   const handleConfirmPlan = () => {
-    if (G.turnActions[myPlayerID].actions.length >= 2) {
+    // フィールド上のチャンピオン数に応じて必要なアクション数を計算
+    const activeChampionsCount = myPlayerState.champions.filter(c => c.pos !== null).length;
+    const requiredActions = Math.min(2, activeChampionsCount);
+
+    if (G.turnActions[myPlayerID].actions.length >= requiredActions) {
       moves.confirmPlan();
     }
   };
@@ -621,8 +625,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                       <div
                         key={`pending-point-${idx}`}
                         className={`absolute z-20 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shadow-lg opacity-50 animate-pulse border-2 border-dashed ${token.value >= 5
-                            ? 'bg-red-500/50 text-white border-red-300'
-                            : 'bg-yellow-400/50 text-black border-yellow-600'
+                          ? 'bg-red-500/50 text-white border-red-300'
+                          : 'bg-yellow-400/50 text-black border-yellow-600'
                           }`}
                         style={{ top: '2px', left: '2px' }}
                         title={`次ターン: ${token.value}pt 出現予定`}
@@ -859,17 +863,21 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       </div>
 
       {/* コミットボタン */}
-      {G.gamePhase === 'planning' && (
-        <div className="flex gap-4 items-center mt-2">
-          <button
-            className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-bold rounded shadow disabled:opacity-50"
-            onClick={handleConfirmPlan}
-            disabled={G.turnActions[myPlayerID].actions.length < 2}
-          >
-            計画確定 ({G.turnActions[myPlayerID].actions.length}/2)
-          </button>
-        </div>
-      )}
+      {G.gamePhase === 'planning' && (() => {
+        const activeChampionsCount = myPlayerState.champions.filter(c => c.pos !== null).length;
+        const requiredActions = Math.min(2, activeChampionsCount);
+        return (
+          <div className="flex gap-4 items-center mt-2">
+            <button
+              className="px-6 py-2 bg-green-600 hover:bg-green-500 text-white font-bold rounded shadow disabled:opacity-50"
+              onClick={handleConfirmPlan}
+              disabled={G.turnActions[myPlayerID].actions.length < requiredActions}
+            >
+              計画確定 ({G.turnActions[myPlayerID].actions.length}/{requiredActions})
+            </button>
+          </div>
+        );
+      })()}
 
       {/* バトルログ */}
       <div className="w-full max-w-3xl bg-slate-800 p-4 rounded mt-2 h-40 overflow-y-auto">
