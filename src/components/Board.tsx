@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
 import { GameState, Team, ChampionInstance, Card, Position, Tower, DamageEvent } from '../game/types';
 import { getChampionById } from '../game/champions';
-import { getSpawnPositions } from '../game/Game';
+import { getSpawnPositions, isValidDeployPosition } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
 
 type Props = BoardProps<GameState>;
@@ -227,7 +227,10 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     return targets;
   };
 
-  const spawnablePositions = (isDeployPhase && isMyDeployTurn) ? getSpawnPositions(myPlayerID) : [];
+  // 距離制約を満たす配置可能位置を計算
+  const spawnablePositions = (isDeployPhase && isMyDeployTurn)
+    ? getSpawnPositions().filter(pos => isValidDeployPosition(G, pos))
+    : [];
 
   const validMoveTargets = isAwaitingTarget ? getValidMoveTargets() : [];
   const validAttackTargets = isAwaitingTarget ? getValidAttackTargets() : [];

@@ -28,6 +28,7 @@ const CHAMPIONS_ON_FIELD = 3;
 const VICTORY_SCORE = 50;
 const ADMIN_DOMAIN_POINTS = 5; // 中央マスのポイント
 const KILL_POINTS = 5; // 撃破ポイント
+const DEPLOY_MIN_DISTANCE = 2; // 配置時の最低距離制約
 
 // Admin Domain: 中央3x3 (5,5) ~ (7,7)
 function isAdminDomain(x: number, y: number): boolean {
@@ -234,33 +235,50 @@ function createChampionInstance(
   };
 }
 
-export function getSpawnPositions(team: Team): Position[] {
-  // 左右配置: Team 0 (左側), Team 1 (右側)
-  // 13x13ボードの両端3マス分がスポーンエリア
-  
-  if (team === '0') {
-    // 青チーム: 左側 (x=0~2)
-    const positions: Position[] = [];
-    for (let x = 0; x <= 2; x++) {
-      for (let y = 3; y <= 9; y++) {
-        positions.push({ x, y });
-      }
+export function getSpawnPositions(): Position[] {
+  // 全盤面配置可能（中央3x3のAdmin Domainを除く）
+  const positions: Position[] = [];
+  for (let x = 0; x < BOARD_SIZE; x++) {
+    for (let y = 0; y < BOARD_SIZE; y++) {
+      // 中央3x3 (Admin Domain) は配置不可
+      if (isAdminDomain(x, y)) continue;
+      positions.push({ x, y });
     }
-    return positions;
-  } else {
-    // 赤チーム: 右側 (x=10~12)
-    const positions: Position[] = [];
-    for (let x = 10; x <= 12; x++) {
-      for (let y = 3; y <= 9; y++) {
-        positions.push({ x, y });
-      }
-    }
-    return positions;
   }
+  return positions;
+}
+
+/**
+ * 配置位置の妥当性をチェック（距離制約含む）
+ * @param G ゲーム状態
+ * @param pos 配置位置
+ * @param excludeId 除外するチャンピオンID（自分自身）
+ * @returns 配置可能ならtrue
+ */
+export function isValidDeployPosition(G: GameState, pos: Position, excludeId?: string): boolean {
+  // 1. 盤面内チェック
+  if (pos.x < 0 || pos.x >= BOARD_SIZE || pos.y < 0 || pos.y >= BOARD_SIZE) return false;
+  
+  // 2. 中央3x3 (Admin Domain) は配置不可
+  if (isAdminDomain(pos.x, pos.y)) return false;
+  
+  // 3. 他のチャンピオンとの距離チェック
+  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+  for (const c of allChampions) {
+    if (c.id === excludeId) continue;
+    if (c.pos === null) continue;
+    
+    const distance = getDistance(pos, c.pos);
+    if (distance < DEPLOY_MIN_DISTANCE) {
+      return false; // 距離が近すぎる
+    }
+  }
+  
+  return true;
 }
 
 function getInitialPositions(team: Team): Position[] {
-  const spawns = getSpawnPositions(team);
+  const spawns = getSpawnPositions();
   return spawns.slice(0, CHAMPIONS_ON_FIELD);
 }
 
@@ -650,18 +668,10 @@ const commonMoves = {
       if (!champion) return;
       if (champion.pos !== null) return; // 既に配置済み
       
-      // 配置位置の妥当性チェック
-      // 1. 他のユニットがいないか
-      const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-      if (allChampions.some(c => c.pos?.x === x && c.pos?.y === y)) {
-        return; // 重なっている
-      }
-      
-      // 2. スポーン可能エリアか (簡易チェック: getSpawnPositionsに含まれるか)
-      // より厳密には「自軍タワーの周囲1マス」
-      const spawnable = getSpawnPositions(team);
-      if (!spawnable.some(p => p.x === x && p.y === y)) {
-        return; // エリア外
+      // 配置位置の妥当性チェック（距離制約含む）
+      const pos = { x, y };
+      if (!isValidDeployPosition(G, pos)) {
+        return; // 配置不可（距離制約違反または中央エリア）
       }
       
       // 配置実行
