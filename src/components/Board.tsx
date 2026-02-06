@@ -932,6 +932,40 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
         ))}
       </div>
+
+      {/* ゲームオーバー画面 */}
+      {ctx.gameover && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl border-4 border-slate-600 max-w-md">
+            {ctx.gameover.winner === myPlayerID ? (
+              <>
+                <div className="text-6xl mb-4">🏆</div>
+                <h2 className="text-4xl font-bold text-yellow-400 mb-4">勝利！</h2>
+                <p className="text-xl text-green-400">おめでとうございます！</p>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl mb-4">💔</div>
+                <h2 className="text-4xl font-bold text-red-400 mb-4">敗北...</h2>
+                <p className="text-xl text-slate-400">また挑戦してください</p>
+              </>
+            )}
+            <div className="mt-6 pt-4 border-t border-slate-600">
+              <div className="text-lg text-slate-300 mb-2">最終スコア</div>
+              <div className="flex justify-center gap-8 text-xl font-bold">
+                <span className="text-blue-400">青: {G.scores['0']}pt</span>
+                <span className="text-red-400">赤: {G.scores['1']}pt</span>
+              </div>
+            </div>
+            <button
+              className="mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors"
+              onClick={() => window.location.reload()}
+            >
+              もう一度プレイ
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
