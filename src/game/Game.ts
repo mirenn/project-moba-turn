@@ -1371,8 +1371,9 @@ export function findReachablePositionsWithPath(
       // 障害物チェック（チャンピオン・ブロック）
       if (isObstacle(G, nx, ny, movingChampionId)) continue;
       
-      // 移動コスト計算（自陣は0、それ以外は1）
-      const tileCost = G.territory[ny][nx] === team ? 0 : 1;
+      // 移動コスト計算（自陣は0.5、それ以外は1）
+      // 自陣は2マスで1移動距離を消費
+      const tileCost = G.territory[ny][nx] === team ? 0.5 : 1;
       const newCost = current.cost + tileCost;
       
       // 最大コストを超えたらスキップ
