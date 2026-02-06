@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
 import { GameState, Team, ChampionInstance, Card, Position, Tower, DamageEvent, Block } from '../game/types';
 import { getChampionById } from '../game/champions';
-import { getSpawnPositions, isValidDeployPosition } from '../game/Game';
+import { getSpawnPositions, isValidDeployPosition, findReachablePositionsWithPath } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
 
 type Props = BoardProps<GameState>;
@@ -39,6 +39,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedChampionId, setSelectedChampionId] = useState<string | null>(null);
   const [selectedEnemyChampionId, setSelectedEnemyChampionId] = useState<string | null>(null);
   const [visibleDamageEvents, setVisibleDamageEvents] = useState<VisibleDamageEvent[]>([]);
+  const [hoveredMovePos, setHoveredMovePos] = useState<Position | null>(null); // 経路プレビュー用
   const processedEventIdsRef = useRef<Set<string>>(new Set());
 
   const myPlayerID = (playerID || '0') as Team;
@@ -142,52 +143,33 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     };
   }, [G.cpuActionDelay]);
 
-  // 移動可能なマスを計算
-  const getValidMoveTargets = (): Position[] => {
-    if (!resolvingChampion || !resolvingChampion.pos) return [];
+  // 移動可能なマスを計算（BFSベース、障害物考慮）
+  const getValidMoveTargets = (): Map<string, { cost: number; path: Position[] }> => {
+    if (!resolvingChampion || !resolvingChampion.pos) return new Map();
 
-    // 代替アクションの場合: 2マス（マンハッタン距離2以内）
+    const team = currentAction?.team || myPlayerID;
+
+    // 代替アクションの場合: 2マス移動（BFSで障害物考慮）
     if (isAlternativeMove) {
-      const positions: Position[] = [];
-      const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-
-      for (let dx = -2; dx <= 2; dx++) {
-        for (let dy = -2; dy <= 2; dy++) {
-          const dist = Math.abs(dx) + Math.abs(dy);
-          if (dist >= 1 && dist <= 2) {
-            const x = resolvingChampion.pos.x + dx;
-            const y = resolvingChampion.pos.y + dy;
-
-            if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) continue;
-
-            const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
-            if (!isOccupied) {
-              positions.push({ x, y });
-            }
-          }
-        }
-      }
-      return positions;
+      return findReachablePositionsWithPath(
+        G,
+        resolvingChampion.pos,
+        2, // 代替アクションは2マス
+        team,
+        resolvingChampion.id
+      );
     }
 
     // 通常のカード移動
-    if (!resolvingCard || resolvingCard.move <= 0) return [];
+    if (!resolvingCard || resolvingCard.move <= 0) return new Map();
 
-    const positions: Position[] = [];
-    const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      for (let y = 0; y < BOARD_SIZE; y++) {
-        const dist = getDistance(resolvingChampion.pos, { x, y });
-        if (dist > 0 && dist <= resolvingCard.move) {
-          const isOccupied = allChampions.some(c => c.pos?.x === x && c.pos?.y === y);
-          if (!isOccupied) {
-            positions.push({ x, y });
-          }
-        }
-      }
-    }
-    return positions;
+    return findReachablePositionsWithPath(
+      G,
+      resolvingChampion.pos,
+      resolvingCard.move,
+      team,
+      resolvingChampion.id
+    );
   };
 
   // 攻撃可能な敵（チャンピオン・タワー）を計算
@@ -232,8 +214,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     ? getSpawnPositions().filter(pos => isValidDeployPosition(G, pos))
     : [];
 
-  const validMoveTargets = isAwaitingTarget ? getValidMoveTargets() : [];
+  const validMoveTargetsMap = isAwaitingTarget ? getValidMoveTargets() : new Map<string, { cost: number; path: Position[] }>();
   const validAttackTargets = isAwaitingTarget ? getValidAttackTargets() : [];
+
+  // ホバー中の経路
+  const hoveredPath = hoveredMovePos ? validMoveTargetsMap.get(`${hoveredMovePos.x},${hoveredMovePos.y}`)?.path || [] : [];
 
   const getCellContent = (x: number, y: number) => {
     const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
@@ -248,7 +233,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       const { champion } = getCellContent(x, y);
 
       // 移動先として選択
-      const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
+      const isMoveTarget = validMoveTargetsMap.has(`${x},${y}`);
       if (isMoveTarget) {
         // 移動先を選択
         // 攻撃対象はここでは設定せず、サーバー側の待機ロジックとクライアントの2段階クリックに任せる
@@ -575,9 +560,13 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               const isActing = champion && actingChampionIds.includes(champion.id);
 
               // 解決フェーズのハイライト
-              const isMoveTarget = validMoveTargets.some(p => p.x === x && p.y === y);
+              const isMoveTarget = validMoveTargetsMap.has(`${x},${y}`);
               const isAttackTarget = validAttackTargets.some(t => t.pos && t.pos.x === x && t.pos.y === y);
               const isResolvingChamp = resolvingChampion && champion && resolvingChampion.id === champion.id;
+
+              // 経路プレビュー（ホバー中の経路上にあるか）
+              const isOnHoveredPath = hoveredPath.some(p => p.x === x && p.y === y);
+              const isHoveredTarget = hoveredMovePos?.x === x && hoveredMovePos?.y === y;
 
               // 配置フェーズのハイライト
               const isSpawnable = spawnablePositions.some(p => p.x === x && p.y === y);
@@ -586,7 +575,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               if (isSelected) bgClass = 'bg-yellow-900 ring-2 ring-yellow-400';
               if (isSelectedEnemy) bgClass = 'bg-red-900 ring-2 ring-red-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
+
+              // 経路プレビュー表示（ホバー中の移動先への経路をハイライト）
+              if (isOnHoveredPath && !isHoveredTarget) bgClass = 'bg-cyan-600/60 ring-1 ring-cyan-400';
               if (isMoveTarget) bgClass = 'bg-green-700/50 ring-2 ring-green-400 cursor-pointer';
+              if (isHoveredTarget) bgClass = 'bg-green-500/70 ring-2 ring-green-300 cursor-pointer';
               if (isAttackTarget) bgClass = 'bg-red-700/50 ring-2 ring-red-400 cursor-pointer';
               if (isResolvingChamp) bgClass = 'bg-orange-800 ring-2 ring-orange-400';
 
@@ -597,6 +590,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   key={`${x}-${y}`}
                   className={`w-10 h-10 flex items-center justify-center border border-slate-600/30 relative cursor-pointer ${bgClass}`}
                   onClick={() => handleCellClick(x, y)}
+                  onMouseEnter={() => isMoveTarget ? setHoveredMovePos({ x, y }) : null}
+                  onMouseLeave={() => setHoveredMovePos(null)}
                 >
                   {/* 陣地カラー表示 */}
                   {territoryOwner === '0' && <div className="absolute inset-0 bg-blue-700/70 pointer-events-none"></div>}

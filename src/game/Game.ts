@@ -1074,10 +1074,8 @@ function resolveCardAction(
         // 移動先を塗る
         paintTile(G, action.targetPos.x, action.targetPos.y, team);
         
-        // 移動経路塗り（始点と終点の間も塗る必要がある場合）
-        // ユーザー要望: "移動ルートに「ライン」を生成"
-        // 直線補間で塗る
-        paintPath(G, oldPos, action.targetPos, team);
+        // 移動経路塗り（BFS経路を使用）
+        paintPathBetween(G, oldPos, action.targetPos, team, champion.id);
       }
     }
   }
@@ -1301,74 +1299,149 @@ function resolveCardAction(
   champion.usedCards.push(card);
 }
 
-// ヘルパー関数: 移動コスト計算 (BFS)
-function calculateMoveCost(G: GameState, start: Position, end: Position, team: Team): number {
-  if (start.x === end.x && start.y === end.y) return 0;
+// 方向優先順位（決定論的経路のため固定: 上→右→下→左）
+const DIRECTIONS = [
+  { dx: 0, dy: -1 },  // 上
+  { dx: 1, dy: 0 },   // 右
+  { dx: 0, dy: 1 },   // 下
+  { dx: -1, dy: 0 },  // 左
+];
 
-  const size = BOARD_SIZE;
-  const visited = Array(size).fill(null).map(() => Array(size).fill(false));
-  const queue: { pos: Position; cost: number }[] = [{ pos: start, cost: 0 }];
-  visited[start.y][start.x] = true;
+// 障害物判定（チャンピオン・ブロックがあるマスは通過不可）
+function isObstacle(G: GameState, x: number, y: number, movingChampionId?: string): boolean {
+  // ブロック判定
+  if (G.blocks.some(b => b.x === x && b.y === y)) {
+    return true;
+  }
+  
+  // チャンピオン判定（移動中のチャンピオン自身は除外）
+  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+  if (allChampions.some(c => 
+    c.pos !== null && 
+    c.pos.x === x && 
+    c.pos.y === y && 
+    c.id !== movingChampionId
+  )) {
+    return true;
+  }
+  
+  return false;
+}
 
-  const directions = [
-    { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
-    { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
+/**
+ * BFSで障害物を考慮した経路を計算
+ * 到達可能なマスとその経路を返す
+ * @param G ゲーム状態
+ * @param start 開始位置
+ * @param maxCost 最大移動コスト
+ * @param team 移動するチームのID（自陣コスト0のため）
+ * @param movingChampionId 移動するチャンピオンのID（障害物判定で除外）
+ * @returns 到達可能な位置と経路のマップ
+ */
+export function findReachablePositionsWithPath(
+  G: GameState,
+  start: Position,
+  maxCost: number,
+  team: Team,
+  movingChampionId?: string
+): Map<string, { cost: number; path: Position[] }> {
+  const result = new Map<string, { cost: number; path: Position[] }>();
+  const posKey = (p: Position) => `${p.x},${p.y}`;
+  
+  // 開始位置
+  result.set(posKey(start), { cost: 0, path: [start] });
+  
+  // BFSキュー: { pos, cost, path }
+  const queue: { pos: Position; cost: number; path: Position[] }[] = [
+    { pos: start, cost: 0, path: [start] }
   ];
-
+  
   while (queue.length > 0) {
-    // コストが小さい順に処理したいが、単純なキューでも距離順になるのでOK
-    // ただしコスト重みが異なる（0と1）ので、本当はDijkstraかDequeが必要。
-    // 今回は簡易的に「コスト0マスの移動」を優先的に探索するように配列操作するか、
-    // あるいは単純に全探索して最小コストを見つける
-    
-    // 簡易実装: 配列をソートする（効率は悪いが盤面が小さいのでOK）
+    // コスト順にソート（Dijkstra風、自陣コスト0のため）
     queue.sort((a, b) => a.cost - b.cost);
-    const { pos, cost } = queue.shift()!;
-
-    if (pos.x === end.x && pos.y === end.y) return cost;
-
-    for (const dir of directions) {
-      const nx = pos.x + dir.dx;
-      const ny = pos.y + dir.dy;
-
-      if (nx >= 0 && nx < size && ny >= 0 && ny < size && !visited[ny][nx]) {
-        // 壁（他ユニット）判定はここでは行わない（すり抜け不可ルールは別途あるが、コスト計算としては最短パスを探す）
-        // ただし敵ユニットがいるマスは通れないとするのが一般的
-        // ここでは「移動力チェック」用なので、障害物は無視して地形コストのみ見る
-        
-        visited[ny][nx] = true;
-        
-        // 自陣ならコスト0、それ以外は1
-        const tileCost = G.territory[ny][nx] === team ? 0 : 1;
-        queue.push({ pos: { x: nx, y: ny }, cost: cost + tileCost });
+    const current = queue.shift()!;
+    
+    for (const dir of DIRECTIONS) {
+      const nx = current.pos.x + dir.dx;
+      const ny = current.pos.y + dir.dy;
+      
+      // 盤面外チェック
+      if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
+      
+      // 障害物チェック（チャンピオン・ブロック）
+      if (isObstacle(G, nx, ny, movingChampionId)) continue;
+      
+      // 移動コスト計算（自陣は0、それ以外は1）
+      const tileCost = G.territory[ny][nx] === team ? 0 : 1;
+      const newCost = current.cost + tileCost;
+      
+      // 最大コストを超えたらスキップ
+      if (newCost > maxCost) continue;
+      
+      const key = posKey({ x: nx, y: ny });
+      const existing = result.get(key);
+      
+      // より低いコストで到達できるか、まだ訪問していない場合
+      if (!existing || existing.cost > newCost) {
+        const newPath = [...current.path, { x: nx, y: ny }];
+        result.set(key, { cost: newCost, path: newPath });
+        queue.push({ pos: { x: nx, y: ny }, cost: newCost, path: newPath });
       }
     }
   }
   
-  return Infinity; // 到達不能
+  // 開始位置は除外（自分自身への移動は不要）
+  result.delete(posKey(start));
+  
+  return result;
 }
 
-// ヘルパー関数: 経路塗り (Bresenham's line algorithm or simple interpolation)
-function paintPath(G: GameState, start: Position, end: Position, team: Team) {
-  let x0 = start.x;
-  let y0 = start.y;
-  const x1 = end.x;
-  const y1 = end.y;
+/**
+ * 2点間の最短経路を計算（障害物考慮）
+ * @returns 経路の配列、到達不能ならnull
+ */
+export function findPathBetween(
+  G: GameState,
+  start: Position,
+  end: Position,
+  team: Team,
+  movingChampionId?: string,
+  maxCost: number = Infinity
+): Position[] | null {
+  const reachable = findReachablePositionsWithPath(G, start, maxCost, team, movingChampionId);
+  const key = `${end.x},${end.y}`;
+  const result = reachable.get(key);
+  return result ? result.path : null;
+}
 
-  const dx = Math.abs(x1 - x0);
-  const dy = Math.abs(y1 - y0);
-  const sx = (x0 < x1) ? 1 : -1;
-  const sy = (y0 < y1) ? 1 : -1;
-  let err = dx - dy;
+// ヘルパー関数: 移動コスト計算 (BFS)（障害物考慮）
+function calculateMoveCost(G: GameState, start: Position, end: Position, team: Team, movingChampionId?: string): number {
+  if (start.x === end.x && start.y === end.y) return 0;
+  
+  // 障害物を考慮した経路探索
+  const reachable = findReachablePositionsWithPath(G, start, Infinity, team, movingChampionId);
+  const key = `${end.x},${end.y}`;
+  const result = reachable.get(key);
+  
+  return result ? result.cost : Infinity;
+}
 
-  while(true) {
-    paintTile(G, x0, y0, team);
-    if ((x0 === x1) && (y0 === y1)) break;
-    const e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x0 += sx; }
-    if (e2 < dx) { err += dx; y0 += sy; }
+// ヘルパー関数: BFS経路を塗る
+function paintPath(G: GameState, path: Position[], team: Team) {
+  for (const pos of path) {
+    paintTile(G, pos.x, pos.y, team);
   }
+}
 
+// 旧API互換（2点間を塗る場合、経路計算して塗る）
+function paintPathBetween(G: GameState, start: Position, end: Position, team: Team, movingChampionId?: string) {
+  const path = findPathBetween(G, start, end, team, movingChampionId);
+  if (path) {
+    paintPath(G, path, team);
+  } else {
+    // フォールバック: 経路が見つからない場合は終点のみ塗る
+    paintTile(G, end.x, end.y, team);
+  }
 }
 
 /**
