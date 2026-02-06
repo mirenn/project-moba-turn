@@ -28,6 +28,14 @@ export interface Position {
   y: number;
 }
 
+// ブロック障害物
+export interface Block {
+  x: number;
+  y: number;
+  hp: number;      // 現在HP (1=脆い, 2=硬い)
+  maxHp: number;   // 最大HP
+}
+
 // カード定義
 export interface Card {
   id: string;
@@ -41,6 +49,8 @@ export interface Card {
   effect?: string;         // 特殊効果の説明
   effectFn?: string;       // 効果処理の識別子
   isSwap?: boolean;        // 交代カードかどうか
+  isDirectional?: boolean; // 方向指定攻撃かどうか
+  lineRange?: number;      // 直線範囲（方向指定攻撃用）
 }
 
 // チャンピオン定義（テンプレート）
@@ -87,6 +97,7 @@ export interface CardAction {
   targetChampionId?: string; // 攻撃対象のチャンピオンID
   targetTowerId?: string;    // 攻撃対象のタワーID
   isAlternativeMove?: boolean; // 代替アクション（2マス移動のみ）として使用
+  attackDirection?: Position;  // 方向指定攻撃の方向ベクトル（例: {x:1, y:0}=右）
 }
 
 // ガード行動指示
@@ -169,6 +180,9 @@ export interface GameState {
   
   // ホームマス（最初のチャンピオン配置マス、永続的に保護される）
   homeSquares: Record<Team, Position[]>;
+  
+  // 障害物ブロック
+  blocks: Block[];
 }
 
 // 旧型との互換性のため（移行期間中）

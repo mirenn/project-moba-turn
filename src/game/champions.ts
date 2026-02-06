@@ -152,7 +152,9 @@ const enshishiCards: Card[] = [
     power: 90,
     move: 0,
     attackRange: 2,
-    effect: '2マス以内の1体に攻撃',
+    isDirectional: true,
+    lineRange: 2,
+    effect: '指定方向に2マス範囲攻撃（ブロックを貫通しない）',
   },
   {
     id: 'enshishi-flaredrive',

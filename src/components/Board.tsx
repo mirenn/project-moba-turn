@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
-import { GameState, Team, ChampionInstance, Card, Position, Tower, DamageEvent } from '../game/types';
+import { GameState, Team, ChampionInstance, Card, Position, Tower, DamageEvent, Block } from '../game/types';
 import { getChampionById } from '../game/champions';
 import { getSpawnPositions, isValidDeployPosition } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
@@ -428,12 +428,44 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           <div className="text-xs text-slate-400 mb-2">
             {isAlternativeMove
               ? '緑のマスをクリックして移動先を選択（2マス以内）'
-              : (resolvingCard && resolvingCard.isSwap
-                ? 'ベンチのチャンピオンをクリックして交代対象を選択'
-                : (resolvingCard && resolvingCard.move > 0
-                  ? '緑のマスをクリックして移動先を選択'
-                  : '赤い敵をクリックして攻撃対象を選択'))}
+              : (resolvingCard && resolvingCard.isDirectional
+                ? '攻撃する方向を選択してください'
+                : (resolvingCard && resolvingCard.isSwap
+                  ? 'ベンチのチャンピオンをクリックして交代対象を選択'
+                  : (resolvingCard && resolvingCard.move > 0
+                    ? '緑のマスをクリックして移動先を選択'
+                    : '赤い敵をクリックして攻撃対象を選択')))}
           </div>
+
+          {/* 方向指定攻撃の場合: 4方向ボタン */}
+          {resolvingCard && resolvingCard.isDirectional && (
+            <div className="flex flex-col items-center gap-1 mb-3">
+              <button
+                className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
+                onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: 0, y: -1 })}
+                title="上方向"
+              >↑</button>
+              <div className="flex gap-1">
+                <button
+                  className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
+                  onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: -1, y: 0 })}
+                  title="左方向"
+                >←</button>
+                <div className="w-12 h-10 flex items-center justify-center text-slate-400">●</div>
+                <button
+                  className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
+                  onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: 1, y: 0 })}
+                  title="右方向"
+                >→</button>
+              </div>
+              <button
+                className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
+                onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: 0, y: 1 })}
+                title="下方向"
+              >↓</button>
+            </div>
+          )}
+
           <button
             className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded"
             onClick={handleSkipAction}
@@ -602,7 +634,21 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
                   <span className="absolute bottom-0 right-0.5 text-[8px] text-slate-500">{x},{y}</span>
 
-                  {/* ポイントトークン表示 */}
+                  {/* ブロック障害物表示 */}
+                  {G.blocks
+                    ?.filter(b => b.x === x && b.y === y)
+                    .map((block, idx) => (
+                      <div
+                        key={`block-${idx}`}
+                        className={`absolute inset-1 rounded flex items-center justify-center z-15
+                          ${block.maxHp === 1 ? 'bg-amber-600 border-amber-400' : 'bg-stone-500 border-stone-400'}
+                          border-2 shadow-lg`}
+                        title={`ブロック HP: ${block.hp}/${block.maxHp}`}
+                      >
+                        <span className="text-white text-sm font-bold">{block.hp}</span>
+                      </div>
+                    ))
+                  }
                   {G.pointTokens
                     ?.filter(t => t.x === x && t.y === y)
                     .map((token, idx) => (

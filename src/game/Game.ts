@@ -13,7 +13,8 @@ import {
   PendingAction,
   ElementType,
   PointToken,
-  PendingPointToken
+  PendingPointToken,
+  Block
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
@@ -34,6 +35,24 @@ const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
 function isAdminDomain(x: number, y: number): boolean {
   return x >= 5 && x <= 7 && y >= 5 && y <= 7;
 }
+
+// 初期ブロック配置定義
+const INITIAL_BLOCKS: Omit<Block, 'hp'>[] = [
+  // 脆いブロック (HP1) - 四隅付近
+  { x: 3, y: 1, maxHp: 1 },
+  { x: 9, y: 1, maxHp: 1 },
+  { x: 1, y: 3, maxHp: 1 },
+  { x: 11, y: 3, maxHp: 1 },
+  { x: 1, y: 9, maxHp: 1 },
+  { x: 11, y: 9, maxHp: 1 },
+  { x: 3, y: 11, maxHp: 1 },
+  { x: 9, y: 11, maxHp: 1 },
+  // 硬いブロック (HP2) - 中央エリア周辺
+  { x: 4, y: 3, maxHp: 2 },
+  { x: 8, y: 3, maxHp: 2 },
+  { x: 4, y: 9, maxHp: 2 },
+  { x: 8, y: 9, maxHp: 2 },
+];
 
 // 陣地を塗る
 export function paintTile(G: GameState, x: number, y: number, team: Team): void {
@@ -471,7 +490,8 @@ const commonMoves = {
       targetPos?: Position,
       targetChampionId?: string,
       targetTowerId?: string,
-      skipAttack?: boolean
+      skipAttack?: boolean,
+      attackDirection?: Position
     ) => {
       if (G.gamePhase !== 'resolution') return;
       if (!G.currentResolvingAction) return;
@@ -496,6 +516,7 @@ const commonMoves = {
       if (targetPos) cardAction.targetPos = targetPos;
       if (targetChampionId) cardAction.targetChampionId = targetChampionId;
       if (targetTowerId) cardAction.targetTowerId = targetTowerId;
+      if (attackDirection) cardAction.attackDirection = attackDirection;
 
       // 代替アクション以外でカード情報を取得
       const card = !cardAction.isAlternativeMove 
@@ -505,8 +526,13 @@ const commonMoves = {
       // 解決の可否を判定
       let readyToResolve = true;
 
+      // 0. 方向指定攻撃の場合：方向が設定されていれば即解決
+      if (card && card.isDirectional && cardAction.attackDirection) {
+        // 方向が設定されているので即解決
+        readyToResolve = true;
+      }
       // 1. 代替アクションの場合：移動先が必須
-      if (cardAction.isAlternativeMove) {
+      else if (cardAction.isAlternativeMove) {
         if (!cardAction.targetPos) readyToResolve = false;
       } 
       // 2. カードアクションの場合
@@ -780,6 +806,7 @@ export const LoLBoardGame = {
       damageEvents: [],
       cpuActionDelay: 0,
       homeSquares: { '0': [], '1': [] },
+      blocks: INITIAL_BLOCKS.map(b => ({ ...b, hp: b.maxHp })),
     };
   },
 
@@ -1072,8 +1099,81 @@ function resolveCardAction(
     // ターゲット指定座標があればそこを塗る
     let targetPos = action.targetPos;
     
-    // チャンピオンへの攻撃
-    if (action.targetChampionId) {
+    // 方向指定攻撃（かえんほうしゃ等）の処理
+    if (card.isDirectional && action.attackDirection && card.lineRange) {
+      const dir = action.attackDirection;
+      const lineRange = card.lineRange;
+      
+      G.turnLog.push(`${championName} の ${card.nameJa}！`);
+      
+      for (let i = 1; i <= lineRange; i++) {
+        const tx = champion.pos.x + dir.x * i;
+        const ty = champion.pos.y + dir.y * i;
+        
+        // 盤面外チェック
+        if (tx < 0 || tx >= BOARD_SIZE || ty < 0 || ty >= BOARD_SIZE) break;
+        
+        // ブロックチェック（当たったら終了）
+        const block = G.blocks.find(b => b.x === tx && b.y === ty);
+        if (block) {
+          block.hp--;
+          G.turnLog.push(`ブロックにヒット！ (残りHP: ${block.hp})`);
+          paintTile(G, tx, ty, team);
+          if (block.hp <= 0) {
+            G.blocks = G.blocks.filter(b => b !== block);
+            G.turnLog.push(`ブロックが破壊された！`);
+          }
+          break; // 貫通しない
+        }
+        
+        // 敵チャンピオンチェック
+        const enemy = G.players[enemyTeam].champions.find(c => 
+          c.pos !== null && c.pos.x === tx && c.pos.y === ty
+        );
+        if (enemy) {
+          const { damage, effectiveness } = calculateDamage(
+            card.power,
+            card.type,
+            champion.currentType,
+            enemy.currentType
+          );
+          
+          let finalDamage = damage;
+          if (enemy.isGuarding) {
+            finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
+            G.turnLog.push(`${getChampionDisplayName(enemy)} はガードしている！`);
+          }
+          
+          enemy.currentHp -= finalDamage;
+          
+          G.damageEvents.push({
+            id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            targetId: enemy.id,
+            amount: finalDamage,
+            effectiveness: effectiveness || undefined,
+            timestamp: Date.now(),
+          });
+          
+          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
+          if (effectiveness) logMsg += ` ${effectiveness}`;
+          G.turnLog.push(logMsg);
+          
+          // 撃破処理
+          if (enemy.currentHp <= 0) {
+            enemy.pos = null;
+            enemy.knockoutTurnsRemaining = KNOCKOUT_TURNS;
+            enemy.currentHp = 0;
+            G.scores[team] += KILL_POINTS;
+            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt`);
+          }
+        }
+        
+        // 攻撃範囲を塗る
+        paintTile(G, tx, ty, team);
+      }
+    }
+    // 通常の単体ターゲット攻撃
+    else if (action.targetChampionId) {
       const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
       
       if (target && target.pos) {
