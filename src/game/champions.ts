@@ -101,8 +101,8 @@ const kidoubaCards: Card[] = [
     power: 50,
     move: 1,
     attackRange: 1,
-    effect: '隣接1体に攻撃。30%で相手を1マス押し出す',
-    effectFn: 'knockback',
+    isSurroundingAoE: true,
+    effect: '周囲1マス全体に攻撃（発動時に自動発生）',
   },
   {
     id: 'kidouba-ironhead',

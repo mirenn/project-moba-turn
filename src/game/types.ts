@@ -51,6 +51,7 @@ export interface Card {
   isSwap?: boolean;        // 交代カードかどうか
   isDirectional?: boolean; // 方向指定攻撃かどうか
   lineRange?: number;      // 直線範囲（方向指定攻撃用）
+  isSurroundingAoE?: boolean; // 周囲1マス全体攻撃かどうか
 }
 
 // チャンピオン定義（テンプレート）

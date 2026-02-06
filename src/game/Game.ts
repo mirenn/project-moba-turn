@@ -1172,6 +1172,81 @@ function resolveCardAction(
         paintTile(G, tx, ty, team);
       }
     }
+    // 周囲1マス全体攻撃（ふみつけ等）の処理
+    else if (card.isSurroundingAoE) {
+      G.turnLog.push(`${championName} の ${card.nameJa}！`);
+      
+      // 8方向（周囲1マス）をすべて攻撃
+      const surroundingDirs = [
+        { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+        { dx: -1, dy: 0 },                      { dx: 1, dy: 0 },
+        { dx: -1, dy: 1 },  { dx: 0, dy: 1 },  { dx: 1, dy: 1 },
+      ];
+      
+      for (const dir of surroundingDirs) {
+        const tx = champion.pos.x + dir.dx;
+        const ty = champion.pos.y + dir.dy;
+        
+        // 盤面外チェック
+        if (tx < 0 || tx >= BOARD_SIZE || ty < 0 || ty >= BOARD_SIZE) continue;
+        
+        // ブロックへのダメージ
+        const block = G.blocks.find(b => b.x === tx && b.y === ty);
+        if (block) {
+          block.hp--;
+          G.turnLog.push(`ブロックにヒット！ (残りHP: ${block.hp})`);
+          if (block.hp <= 0) {
+            G.blocks = G.blocks.filter(b => b !== block);
+            G.turnLog.push(`ブロックが破壊された！`);
+          }
+        }
+        
+        // 敵チャンピオンへのダメージ
+        const enemy = G.players[enemyTeam].champions.find(c => 
+          c.pos !== null && c.pos.x === tx && c.pos.y === ty
+        );
+        if (enemy) {
+          const { damage, effectiveness } = calculateDamage(
+            card.power,
+            card.type,
+            champion.currentType,
+            enemy.currentType
+          );
+          
+          let finalDamage = damage;
+          if (enemy.isGuarding) {
+            finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
+            G.turnLog.push(`${getChampionDisplayName(enemy)} はガードしている！`);
+          }
+          
+          enemy.currentHp -= finalDamage;
+          
+          G.damageEvents.push({
+            id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            targetId: enemy.id,
+            amount: finalDamage,
+            effectiveness: effectiveness || undefined,
+            timestamp: Date.now(),
+          });
+          
+          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
+          if (effectiveness) logMsg += ` ${effectiveness}`;
+          G.turnLog.push(logMsg);
+          
+          // 撃破処理
+          if (enemy.currentHp <= 0) {
+            enemy.pos = null;
+            enemy.knockoutTurnsRemaining = KNOCKOUT_TURNS;
+            enemy.currentHp = 0;
+            G.scores[team] += KILL_POINTS;
+            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt`);
+          }
+        }
+        
+        // 攻撃範囲を塗る
+        paintTile(G, tx, ty, team);
+      }
+    }
     // 通常の単体ターゲット攻撃
     else if (action.targetChampionId) {
       const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
