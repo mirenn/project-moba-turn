@@ -1021,8 +1021,14 @@ function resolveCardAction(
         );
         
         if (!isOccupied) {
+          // 移動経路を塗る（チャンピオン位置更新前に経路を計算して塗る）
+          const oldPos = { ...champion.pos };
+          
+          // 移動経路塗り（BFS経路を使用）- 位置更新前に計算
+          paintPathBetween(G, oldPos, action.targetPos, team, champion.id);
+          
+          // チャンピオン位置を更新
           champion.pos = action.targetPos;
-          paintTile(G, action.targetPos.x, action.targetPos.y, team);
           G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した（代替アクション）`);
         }
       }
@@ -1063,19 +1069,15 @@ function resolveCardAction(
       );
       
       if (!isOccupied) {
-        // 移動経路を塗る（簡易的に移動先と移動元を結ぶ直線を塗る、あるいはBFS経路）
-        // ここでは「移動により通過したとみなされるマス」を塗るべきだが、
-        // ワープ的な移動でなければ「移動先」を塗る
-        
+        // 移動経路を塗る（チャンピオン位置更新前に経路を計算して塗る）
         const oldPos = { ...champion.pos };
+        
+        // 移動経路塗り（BFS経路を使用）- 位置更新前に計算
+        paintPathBetween(G, oldPos, action.targetPos, team, champion.id);
+        
+        // チャンピオン位置を更新
         champion.pos = action.targetPos;
         G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
-        
-        // 移動先を塗る
-        paintTile(G, action.targetPos.x, action.targetPos.y, team);
-        
-        // 移動経路塗り（BFS経路を使用）
-        paintPathBetween(G, oldPos, action.targetPos, team, champion.id);
       }
     }
   }

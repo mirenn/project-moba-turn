@@ -576,8 +576,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               if (isSelectedEnemy) bgClass = 'bg-red-900 ring-2 ring-red-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
 
-              // 経路プレビュー表示（ホバー中の移動先への経路をハイライト）
-              if (isOnHoveredPath && !isHoveredTarget) bgClass = 'bg-cyan-600/60 ring-1 ring-cyan-400';
+              // 移動先候補（緑の枠）
               if (isMoveTarget) bgClass = 'bg-green-700/50 ring-2 ring-green-400 cursor-pointer';
               if (isHoveredTarget) bgClass = 'bg-green-500/70 ring-2 ring-green-300 cursor-pointer';
               if (isAttackTarget) bgClass = 'bg-red-700/50 ring-2 ring-red-400 cursor-pointer';
@@ -596,6 +595,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   {/* 陣地カラー表示 */}
                   {territoryOwner === '0' && <div className="absolute inset-0 bg-blue-700/70 pointer-events-none"></div>}
                   {territoryOwner === '1' && <div className="absolute inset-0 bg-red-700/70 pointer-events-none"></div>}
+
+                  {/* 経路プレビュー表示（ホバー中の移動先への経路を白い枠で表示） */}
+                  {isOnHoveredPath && !isHoveredTarget && (
+                    <div className="absolute inset-0 border-2 border-white z-30 pointer-events-none"></div>
+                  )}
 
                   {/* Admin Domain (中央3x3) ハイライト */}
                   {x >= 5 && x <= 7 && y >= 5 && y <= 7 && (
