@@ -546,10 +546,10 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
         {/* ゲームボード */}
         <div
-          className="grid gap-0.5 bg-slate-800 p-2 rounded-lg"
+          className="grid gap-0 bg-slate-800 p-2 rounded-lg"
           style={{
-            gridTemplateColumns: `repeat(${BOARD_SIZE}, 56px)`,
-            gridTemplateRows: `repeat(${BOARD_SIZE}, 56px)`
+            gridTemplateColumns: `repeat(${BOARD_SIZE}, 44px)`,
+            gridTemplateRows: `repeat(${BOARD_SIZE}, 44px)`
           }}
         >
           {Array.from({ length: BOARD_SIZE }).map((_, y) => (
@@ -587,7 +587,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               return (
                 <div
                   key={`${x}-${y}`}
-                  className={`w-10 h-10 flex items-center justify-center border border-slate-600/30 relative cursor-pointer ${bgClass}`}
+                  className={`w-10 h-10 flex items-center justify-center relative cursor-pointer ${bgClass}`}
                   onClick={() => handleCellClick(x, y)}
                   onMouseEnter={() => isMoveTarget ? setHoveredMovePos({ x, y }) : null}
                   onMouseLeave={() => setHoveredMovePos(null)}
