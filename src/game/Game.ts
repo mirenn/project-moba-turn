@@ -503,7 +503,6 @@ const commonMoves = {
       { G, random }: { G: GameState; random: any },
       targetPos?: Position,
       targetChampionId?: string,
-      targetTowerId?: string,
       skipAttack?: boolean,
       attackDirection?: Position
     ) => {
@@ -529,7 +528,6 @@ const commonMoves = {
       // 入力を更新 (undefinedでない場合のみ上書き)
       if (targetPos) cardAction.targetPos = targetPos;
       if (targetChampionId) cardAction.targetChampionId = targetChampionId;
-      if (targetTowerId) cardAction.targetTowerId = targetTowerId;
       if (attackDirection) cardAction.attackDirection = attackDirection;
 
       // 代替アクション以外でカード情報を取得
@@ -560,7 +558,7 @@ const commonMoves = {
         // 条件: 攻撃力がある AND 攻撃スキップされていない
         if (card.power > 0 && !skipAttack) {
           // すでにターゲット指定済みならOK
-          if (cardAction.targetChampionId || cardAction.targetTowerId) {
+          if (cardAction.targetChampionId) {
             // OK
           } else {
             // ターゲット未指定の場合、
@@ -917,23 +915,12 @@ export const LoLBoardGame = {
     if (G.scores['0'] >= VICTORY_SCORE) return { winner: '0' };
     if (G.scores['1'] >= VICTORY_SCORE) return { winner: '1' };
     
-    // 全員KO敗北判定: フィールドに出せるチャンピオンが一体もいない場合
+    // 全員ひんし敗北判定: フィールド上のチャンピオンが0体になったチームの負け
+    // （ベンチ・復活待ちの有無は問わず、今動かせるユニットがいない = 敗北）
     for (const team of ['0', '1'] as Team[]) {
       const enemyTeam = team === '0' ? '1' : '0';
-      const hasAnyActive = G.players[team].champions.some(c =>
-        // フィールドにいる OR 復活待ちカウントダウン中（まだ戻れる）
-        c.pos !== null || (c.knockoutTurnsRemaining > 0 && c.currentHp >= 0)
-      );
-      // フィールドにいるチャンピオンが0体、かつ全員が「永続KO」一覧にいる場合
       const hasFieldChampion = G.players[team].champions.some(c => c.pos !== null);
-      const hasBenchAvailable = G.players[team].champions.some(c =>
-        c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
-      );
-      const hasKnockoutCountdown = G.players[team].champions.some(c =>
-        c.knockoutTurnsRemaining > 0
-      );
-      // フィールドに誰もいない & 控えにも誰もいない & 復活待ちもいない = 完全壊滅
-      if (!hasFieldChampion && !hasBenchAvailable && !hasKnockoutCountdown) {
+      if (!hasFieldChampion) {
         return { winner: enemyTeam };
       }
     }
@@ -993,7 +980,7 @@ function processNextAction(G: GameState, random: any) {
   // ターゲットを事前に決定してアクションに設定
   const card = champion.hand.find(c => c.id === action.cardId);
   if (card) {
-    const { targetPos, targetChampionId, targetTowerId } = selectCPUTarget(
+    const { targetPos, targetChampionId } = selectCPUTarget(
       G, 
       champion, 
       card, 

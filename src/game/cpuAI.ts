@@ -556,7 +556,7 @@ export function selectCPUTarget(
   card: Card,
   team: Team,
   isAlternativeMove: boolean = false
-): { targetPos?: Position; targetChampionId?: string; targetTowerId?: string } {
+): { targetPos?: Position; targetChampionId?: string } {
   // 候補を生成して最良のものを選択
   const candidates = generateActionCandidates(G, champion, team)
     .filter(c => c.card.id === card.id && !c.isGuard && c.isAlternativeMove === isAlternativeMove);
@@ -572,8 +572,6 @@ export function selectCPUTarget(
   return {
     targetPos: best.targetPos,
     targetChampionId: best.targetChampionId,
-    // targetTowerId は削除されたが型定義上残っている場合は undefined を返す
-    targetTowerId: undefined,
   };
 }
 

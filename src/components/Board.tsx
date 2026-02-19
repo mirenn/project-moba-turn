@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
-import { GameState, Team, ChampionInstance, Card, Position, Tower, DamageEvent, Block } from '../game/types';
+import { GameState, Team, ChampionInstance, Card, Position, DamageEvent, Block } from '../game/types';
 import { getChampionById } from '../game/champions';
 import { getSpawnPositions, isValidDeployPosition, findReachablePositionsWithPath } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
@@ -172,24 +172,20 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     );
   };
 
-  // 攻撃可能な敵（チャンピオン・タワー）を計算
-  const getValidAttackTargets = (): (ChampionInstance | Tower)[] => {
+  // 攻撃可能な敵（チャンピオン）を計算
+  const getValidAttackTargets = (): ChampionInstance[] => {
     if (!resolvingChampion || !resolvingChampion.pos || !resolvingCard) return [];
     if (resolvingCard.power <= 0) return [];
 
     const pendingMovePos = (currentAction?.action as any)?.targetPos;
     const sourcePos = pendingMovePos || resolvingChampion.pos;
 
-    // 攻撃範囲の決定: 
-    // - カードにattackRangeが設定されていればそれを使用
-    // - 未設定の場合: 移動ありカードは移動後は隣接(1)、移動前は予測範囲(3)
-    // - 未設定の場合: 移動なしカードは範囲(2)
     let attackRange = resolvingCard.attackRange ?? (resolvingCard.move > 0 ? 1 : 2);
     if (resolvingCard.move > 0 && !resolvingCard.attackRange) {
       attackRange = pendingMovePos ? 1 : 3;
     }
 
-    const targets: (ChampionInstance | Tower)[] = [];
+    const targets: ChampionInstance[] = [];
 
     // 敵チャンピオン
     const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
@@ -198,13 +194,6 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         targets.push(enemy);
       }
     });
-
-    // 攻撃可能な床（ユーザー要望：攻撃で床を塗る）
-    // 一旦ターゲット選択時は敵ユニットのみを選択可能とするが、
-    // 任意地点攻撃を可能にするならここを修正する必要がある。
-    // 今回は「敵ユニットがいるマス」または「移動先」を塗る仕様としたため、
-    // 明示的な「空のマスへの攻撃」ターゲット選択は実装しない（仕様確認待ちだが、簡易化のため）
-    // もし空マス攻撃が必要なら、Board全体がターゲット候補になる。
 
     return targets;
   };

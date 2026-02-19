@@ -83,14 +83,7 @@ export interface ChampionInstance {
   knockoutTurnsRemaining: number; // 撃破後の復活待ちターン数（0なら行動可能）
 }
 
-export interface Tower {
-  id: string;
-  hp: number;
-  maxHp: number;
-  pos: Position;
-  team: Team;
-  type: ElementType; // タワーの属性タイプ
-}
+
 
 // カードプレイによる行動指示
 export interface CardAction {
@@ -98,7 +91,6 @@ export interface CardAction {
   cardId: string;          // 使用するカードのID
   targetPos?: Position;    // 移動先または攻撃対象位置
   targetChampionId?: string; // 攻撃対象のチャンピオンID
-  targetTowerId?: string;    // 攻撃対象のタワーID
   isAlternativeMove?: boolean; // 代替アクション（2マス移動のみ）として使用
   attackDirection?: Position;  // 方向指定攻撃の方向ベクトル（例: {x:1, y:0}=右）
 }
