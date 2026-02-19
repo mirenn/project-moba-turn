@@ -179,6 +179,9 @@ export interface GameState {
   
   // 障害物ブロック
   blocks: Block[];
+  
+  // アップグレードフェーズ用
+  upgradeConfirmed: Record<Team, boolean>; // 各チームがアップグレード確定済みか
 }
 
 // 旧型との互換性のため（移行期間中）

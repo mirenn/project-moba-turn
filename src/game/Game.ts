@@ -755,6 +755,80 @@ const commonMoves = {
       
       events.endTurn({ next: G.deployTurn });
     },
+
+    // アップグレードフェーズ: カードを強化
+    upgradeCard: (
+      { G, playerID }: { G: GameState; playerID: string },
+      championId: string,
+      cardId: string,
+      upgradeType: 'power' | 'move'
+    ) => {
+      if (G.gamePhase !== 'upgrade') return;
+      const team = playerID as Team;
+      const player = G.players[team];
+
+      const champion = player.champions.find(c => c.id === championId);
+      if (!champion) return;
+      const card = [...champion.hand, ...champion.usedCards].find(c => c.id === cardId);
+      if (!card) return;
+
+      const currentBonus = upgradeType === 'power' ? (card.bonusPower ?? 0) : (card.bonusMove ?? 0);
+      const maxBonus = upgradeType === 'power' ? UPGRADE_POWER_T2 : UPGRADE_MOVE_T2;
+      if (currentBonus >= maxBonus) return; // 既に最大強化済み
+
+      const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
+      if (player.gold < cost) return; // ゴールド不足
+
+      player.gold -= cost;
+      if (upgradeType === 'power') {
+        const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
+        card.bonusPower = (card.bonusPower ?? 0) + add;
+        const tier = card.bonusPower >= UPGRADE_POWER_T2 ? 'T2' : 'T1';
+        G.turnLog.push(`💪 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 威力+${card.bonusPower} [${tier}] (-${cost}G)`);
+      } else {
+        const add = currentBonus === 0 ? UPGRADE_MOVE_T1 : UPGRADE_MOVE_T2 - UPGRADE_MOVE_T1;
+        card.bonusMove = (card.bonusMove ?? 0) + add;
+        const tier = card.bonusMove >= UPGRADE_MOVE_T2 ? 'T2' : 'T1';
+        G.turnLog.push(`👟 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 移動+${card.bonusMove} [${tier}] (-${cost}G)`);
+      }
+    },
+
+    // アップグレードフェーズ: 確定して次のフェーズへ
+    confirmUpgrade: ({ G }: { G: GameState }) => {
+      if (G.gamePhase !== 'upgrade') return;
+
+      // CPU（チーム1）の自動アップグレード（高威力カードを優先）
+      const cpuPlayer = G.players['1'];
+      const cpuChampions = cpuPlayer.champions;
+      for (const champ of cpuChampions) {
+        const cards = [...champ.hand, ...champ.usedCards]
+          .filter(c => c.power > 0)
+          .sort((a, b) => b.power - a.power);
+        for (const c of cards) {
+          if (cpuPlayer.gold < UPGRADE_COST_T1) break;
+          const currentBonus = c.bonusPower ?? 0;
+          if (currentBonus >= UPGRADE_POWER_T2) continue;
+          const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
+          if (cpuPlayer.gold >= cost) {
+            cpuPlayer.gold -= cost;
+            const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
+            c.bonusPower = currentBonus + add;
+            G.turnLog.push(`[CPU] ${getChampionDisplayName(champ)} の ${c.nameJa} を強化！ 威力+${c.bonusPower}`);
+          }
+        }
+      }
+
+      // 両チーム確定 → 次フェーズへ
+      G.upgradeConfirmed = { '0': false, '1': false };
+      if (needsDeployPhase(G)) {
+        G.gamePhase = 'deploy';
+        G.deployTurn = '0';
+        G.turnLog.push('--- 配置フェーズ開始 ---');
+      } else {
+        G.gamePhase = 'planning';
+        G.turnLog.push('--- 計画フェーズ開始 ---');
+      }
+    },
 };
 
 export const LoLBoardGame = {
@@ -819,6 +893,7 @@ export const LoLBoardGame = {
       cpuActionDelay: 0,
       homeSquares: { '0': [], '1': [] },
       blocks: INITIAL_BLOCKS.map(b => ({ ...b, hp: b.maxHp })),
+      upgradeConfirmed: { '0': false, '1': false },
     };
   },
 
@@ -1067,24 +1142,14 @@ function resolveCardAction(
     G.turnLog.push(`${championName} は ${getTypeNameJa(card.type)} タイプに変化した！`);
   }
   
-  // 移動処理
-  if (card.move > 0 && action.targetPos) {
+  // 移動処理（bonusMoveを加算）
+  const effectiveMove = card.move + (card.bonusMove ?? 0);
+  if (effectiveMove > 0 && action.targetPos) {
     const dist = getDistance(champion.pos, action.targetPos);
-    
-    // 自陣（自チームの色のマス）を通る場合、コスト0として扱うロジックが必要
-    // ここでは簡易的に「マンハッタン距離 - 自陣マスの数 <= move」や
-    // 「経路探索」が必要になるが、一旦は単純な距離判定 + 
-    // 「現在地が自陣ならコスト減少」等の簡易計算、あるいは「自陣ワープ」の実装とする
-    // 
-    // ユーザー要望 A: "カードの移動距離内で、自陣マスは移動距離を消費しない"
-    // これを実現するには経路探索(BFS/Dijkstra)が必要。
-    
-    // 簡易実装: 最短経路上のコストを概算
-    // 本格的な経路探索は計算が重くなる可能性があるが、盤面が13x13なのでBFSで十分可能
     
     const moveCost = calculateMoveCost(G, champion.pos, action.targetPos, team);
     
-    if (moveCost <= card.move) {
+    if (moveCost <= effectiveMove) {
       const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
       const isOccupied = allChampions.some(c => 
         c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
@@ -1153,8 +1218,9 @@ function resolveCardAction(
           c.pos !== null && c.pos.x === tx && c.pos.y === ty
         );
         if (enemy) {
+          const effectivePower1 = card.power + (card.bonusPower ?? 0);
           const { damage, effectiveness } = calculateDamage(
-            card.power,
+            effectivePower1,
             card.type,
             champion.currentType,
             enemy.currentType
@@ -1192,7 +1258,8 @@ function resolveCardAction(
             enemy.knockoutTurnsRemaining = KNOCKOUT_TURNS;
             enemy.currentHp = 0;
             G.scores[team] += KILL_POINTS;
-            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt`);
+            G.players[team].gold += GOLD_PER_KILL;
+            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
           }
         }
         
@@ -1234,8 +1301,9 @@ function resolveCardAction(
           c.pos !== null && c.pos.x === tx && c.pos.y === ty
         );
         if (enemy) {
+          const effectivePower2 = card.power + (card.bonusPower ?? 0);
           const { damage, effectiveness } = calculateDamage(
-            card.power,
+            effectivePower2,
             card.type,
             champion.currentType,
             enemy.currentType
@@ -1273,7 +1341,8 @@ function resolveCardAction(
             enemy.knockoutTurnsRemaining = KNOCKOUT_TURNS;
             enemy.currentHp = 0;
             G.scores[team] += KILL_POINTS;
-            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt`);
+            G.players[team].gold += GOLD_PER_KILL;
+            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
           }
         }
         
@@ -1291,8 +1360,9 @@ function resolveCardAction(
         const dist = getDistance(champion.pos, target.pos);
         
         if (dist <= attackRange) {
+          const effectivePower3 = card.power + (card.bonusPower ?? 0);
           const { damage, effectiveness } = calculateDamage(
-            card.power,
+            effectivePower3,
             card.type,
             champion.currentType,
             target.currentType
@@ -1339,7 +1409,8 @@ function resolveCardAction(
              target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
              target.currentHp = 0;
              G.scores[team] += KILL_POINTS;
-             G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt`);
+             G.players[team].gold += GOLD_PER_KILL;
+             G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
           }
 
           // ノックバック（撃破されていない場合のみ）
@@ -1620,6 +1691,15 @@ function finishResolutionPhase(G: GameState, random: any) {
     isNewPhase = true;
     refillCards(G);
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
+    
+    // フェイズ終了時のゴールド付与
+    const lowerScoreTeam = G.scores['0'] <= G.scores['1'] ? '0' : '1';
+    for (const team of ['0', '1'] as Team[]) {
+      const bonus = team === lowerScoreTeam ? GOLD_LOSER_BONUS : 0;
+      const earned = GOLD_PER_PHASE + bonus;
+      G.players[team].gold += earned;
+      G.turnLog.push(`💰 ${team === '0' ? '青' : '赤'}チーム: +${earned}G (所持: ${G.players[team].gold}G)`);
+    }
   }
   
   // 状態リセット
@@ -1637,15 +1717,20 @@ function finishResolutionPhase(G: GameState, random: any) {
   
   G.turnLog.push('--- ターン終了 ---');
   
-  // 4ターンに1回（フェーズ開始時）のみ配置フェーズに移行
-  // ただし、配置が必要な場合（3体未満のチームがある場合）のみ
-  if (isNewPhase && needsDeployPhase(G)) {
-    G.gamePhase = 'deploy';
-    G.deployTurn = '0'; // 青チームから開始
-    G.turnLog.push('--- 配置フェーズ開始 ---');
+  // フェーズ開始時はアップグレードフェーズを挟む
+  if (isNewPhase) {
+    G.gamePhase = 'upgrade';
+    G.upgradeConfirmed = { '0': false, '1': false };
+    G.turnLog.push('--- アップグレードフェーズ開始 ---');
   } else {
-    // 配置不要なら計画フェーズへ
-    G.gamePhase = 'planning';
+    // 通常ターン: 配置が必要なら配置フェーズ、そうでなければ計画フェーズ
+    if (needsDeployPhase(G)) {
+      G.gamePhase = 'deploy';
+      G.deployTurn = '0';
+      G.turnLog.push('--- 配置フェーズ開始 ---');
+    } else {
+      G.gamePhase = 'planning';
+    }
   }
 }
 
