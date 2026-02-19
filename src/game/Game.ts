@@ -1143,6 +1143,12 @@ function resolveCardAction(
             finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
             G.turnLog.push(`${getChampionDisplayName(enemy)} はガードしている！`);
           }
+          // 装甲特性: 被ダメージを10軽減
+          const enemyDef1 = getChampionById(enemy.definitionId);
+          if (enemyDef1?.ability === 'steelArmor') {
+            finalDamage = Math.max(1, finalDamage - 10);
+            G.turnLog.push(`${getChampionDisplayName(enemy)} の装甲が発動！ダメージ軽減`);
+          }
           
           enemy.currentHp -= finalDamage;
           
@@ -1218,6 +1224,12 @@ function resolveCardAction(
             finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
             G.turnLog.push(`${getChampionDisplayName(enemy)} はガードしている！`);
           }
+          // 装甲特性: 被ダメージを10軽減
+          const enemyDef2 = getChampionById(enemy.definitionId);
+          if (enemyDef2?.ability === 'steelArmor') {
+            finalDamage = Math.max(1, finalDamage - 10);
+            G.turnLog.push(`${getChampionDisplayName(enemy)} の装甲が発動！ダメージ軽減`);
+          }
           
           enemy.currentHp -= finalDamage;
           
@@ -1275,6 +1287,13 @@ function resolveCardAction(
             const hits = 2 + Math.floor(random.Number() * 3);
             finalDamage = finalDamage * hits;
             G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
+          }
+          
+          // 装甲特性: 被ダメージを10軽減（みずしゅりけんは合計ダメージから軽減）
+          const targetDef = getChampionById(target.definitionId);
+          if (targetDef?.ability === 'steelArmor') {
+            finalDamage = Math.max(1, finalDamage - 10);
+            G.turnLog.push(`${getChampionDisplayName(target)} の装甲が発動！ダメージ軽減`);
           }
           
           target.currentHp -= finalDamage;

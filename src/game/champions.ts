@@ -141,8 +141,8 @@ export const KIDOUBA: ChampionDefinition = {
   nameJa: '機動馬',
   type: 'steel',
   hp: 70,
-  ability: 'swift',
-  abilityDesc: 'はやあし: 自チームの陣地上でカードを使用するとき、移動距離が+1される',
+  ability: 'steelArmor',
+  abilityDesc: '装甲: 受けるダメージを常時10軽減する',
   cards: kidoubaCards,
 };
 
