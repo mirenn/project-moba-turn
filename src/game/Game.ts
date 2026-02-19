@@ -31,6 +31,19 @@ const ADMIN_DOMAIN_POINTS = 5; // 中央マスのポイント
 const KILL_POINTS = 5; // 撃破ポイント
 const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
 
+// ゴールド関連定数
+const GOLD_PER_KILL = 5;   // 敵チャンピオン撃破で得るゴールド
+const GOLD_PER_PHASE = 3;  // フェイズ終了時の基本ゴールド
+const GOLD_LOSER_BONUS = 1; // 負けているチームへの追加ゴールド
+
+// アップグレードコスト・効果
+const UPGRADE_COST_T1 = 3;   // Tier1アップグレードのコスト
+const UPGRADE_COST_T2 = 6;   // Tier2アップグレードのコスト
+const UPGRADE_POWER_T1 = 20; // Tier1パワーボーナス
+const UPGRADE_POWER_T2 = 40; // Tier2パワーボーナス
+const UPGRADE_MOVE_T1 = 1;   // Tier1移動ボーナス
+const UPGRADE_MOVE_T2 = 2;   // Tier2移動ボーナス
+
 // Admin Domain: 中央3x3 (5,5) ~ (7,7)
 function isAdminDomain(x: number, y: number): boolean {
   return x >= 5 && x <= 7 && y >= 5 && y <= 7;
@@ -314,6 +327,7 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
     team,
     selectedChampionIds: championIds,
     champions,
+    gold: 0,
   };
 }
 
@@ -902,6 +916,27 @@ export const LoLBoardGame = {
     // スコアベースの勝利判定（50ポイント到達）
     if (G.scores['0'] >= VICTORY_SCORE) return { winner: '0' };
     if (G.scores['1'] >= VICTORY_SCORE) return { winner: '1' };
+    
+    // 全員KO敗北判定: フィールドに出せるチャンピオンが一体もいない場合
+    for (const team of ['0', '1'] as Team[]) {
+      const enemyTeam = team === '0' ? '1' : '0';
+      const hasAnyActive = G.players[team].champions.some(c =>
+        // フィールドにいる OR 復活待ちカウントダウン中（まだ戻れる）
+        c.pos !== null || (c.knockoutTurnsRemaining > 0 && c.currentHp >= 0)
+      );
+      // フィールドにいるチャンピオンが0体、かつ全員が「永続KO」一覧にいる場合
+      const hasFieldChampion = G.players[team].champions.some(c => c.pos !== null);
+      const hasBenchAvailable = G.players[team].champions.some(c =>
+        c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
+      );
+      const hasKnockoutCountdown = G.players[team].champions.some(c =>
+        c.knockoutTurnsRemaining > 0
+      );
+      // フィールドに誰もいない & 控えにも誰もいない & 復活待ちもいない = 完全壊滅
+      if (!hasFieldChampion && !hasBenchAvailable && !hasKnockoutCountdown) {
+        return { winner: enemyTeam };
+      }
+    }
     
     return undefined;
   },

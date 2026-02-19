@@ -52,6 +52,8 @@ export interface Card {
   isDirectional?: boolean; // 方向指定攻撃かどうか
   lineRange?: number;      // 直線範囲（方向指定攻撃用）
   isSurroundingAoE?: boolean; // 周囲1マス全体攻撃かどうか
+  bonusPower?: number;     // アップグレードによるパワーボーナス（累積）
+  bonusMove?: number;      // アップグレードによる移動距離ボーナス（累積）
 }
 
 // チャンピオン定義（テンプレート）
@@ -117,6 +119,7 @@ export interface PlayerState {
   team: Team;
   selectedChampionIds: string[]; // 選択した4体のチャンピオンdefinitionId
   champions: ChampionInstance[]; // ゲーム内のチャンピオンインスタンス
+  gold: number;                  // 現在の所持ゴールド
 }
 
 // 解決待ちの行動
@@ -156,7 +159,7 @@ export interface GameState {
   turnInPhase: number;     // フェイズ内のターン数（1-4）
   turnActions: Record<Team, TurnAction>;
   turnLog: string[];
-  gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ
+  gamePhase: 'deploy' | 'planning' | 'resolution' | 'upgrade'; // ゲームフェーズ
   winner: Team | null;
   
   // 陣取り用
