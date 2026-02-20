@@ -352,8 +352,8 @@ function generateActionCandidates(
   
   if (!champion.pos) return candidates;
   
-  // 各カードについてアクション候補を生成
-  for (const card of champion.hand) {
+  // 各カードについてアクション候補を生成（CD=0のカードのみ）
+  for (const card of champion.cards.filter(c => c.currentCooldown === 0)) {
     if (card.isSwap) continue; // 交代カードは一旦スキップ
     
     // 移動先候補
@@ -455,11 +455,12 @@ function generateActionCandidates(
     }
   }
   
-  // ガードアクション（カードが2枚以上ある場合）
-  if (champion.hand.length >= 2) {
+  // ガードアクション（CD=0のカードが2枚以上ある場合）
+  const availableCards = champion.cards.filter(c => c.currentCooldown === 0);
+  if (availableCards.length >= 2) {
     candidates.push({
       championId: champion.id,
-      card: champion.hand[0], // ダミー
+      card: availableCards[0], // ダミー
       isGuard: true,
       isAlternativeMove: false,
     });
@@ -478,7 +479,7 @@ function generateActionCandidates(
 export function selectCPUActions(G: GameState, cpuTeam: Team): (CardAction | GuardAction)[] {
   const playerState = G.players[cpuTeam];
   const availableChampions = playerState.champions.filter(
-    c => c.pos !== null && c.hand.length > 0
+    c => c.pos !== null && c.cards.some(card => card.currentCooldown === 0)
   );
   
   if (availableChampions.length === 0) return [];
@@ -507,10 +508,11 @@ export function selectCPUActions(G: GameState, cpuTeam: Team): (CardAction | Gua
     
     if (action.isGuard) {
       // ガードアクション
-      if (champion.hand.length >= 2) {
+      const availableGuardCards = champion.cards.filter(c => c.currentCooldown === 0);
+      if (availableGuardCards.length >= 2) {
         selectedActions.push({
           championId: champion.id,
-          discardCardIds: [champion.hand[0].id, champion.hand[1].id] as [string, string],
+          discardCardIds: [availableGuardCards[0].id, availableGuardCards[1].id] as [string, string],
         });
         usedChampionIds.add(champion.id);
       }
@@ -533,9 +535,10 @@ export function selectCPUActions(G: GameState, cpuTeam: Team): (CardAction | Gua
     for (const champion of availableChampions) {
       if (usedChampionIds.has(champion.id)) continue;
       if (selectedActions.length >= 2) break;
-      if (champion.hand.length === 0) continue;
+      const availableFallbackCards = champion.cards.filter(c => c.currentCooldown === 0);
+      if (availableFallbackCards.length === 0) continue;
       
-      const card = champion.hand[0];
+      const card = availableFallbackCards[0];
       selectedActions.push({
         championId: champion.id,
         cardId: card.id,

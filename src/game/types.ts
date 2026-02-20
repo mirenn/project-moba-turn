@@ -54,6 +54,8 @@ export interface Card {
   isSurroundingAoE?: boolean; // 周囲1マス全体攻撃かどうか
   bonusPower?: number;     // アップグレードによるパワーボーナス（累積）
   bonusMove?: number;      // アップグレードによる移動距離ボーナス（累積）
+  cooldown: number;        // 基本クールダウン（使用後に設定されるターン数）
+  currentCooldown: number; // 残りクールダウン（0なら使用可能）
 }
 
 // チャンピオン定義（テンプレート）
@@ -77,8 +79,7 @@ export interface ChampionInstance {
   maxHp: number;
   currentType: ElementType; // 現在の属性（へんげんじざい等で変化）
   pos: Position | null;    // nullの場合はベンチ
-  hand: Card[];            // 現在の手札
-  usedCards: Card[];       // 使用済みカード
+  cards: Card[];           // 全カード（cooldownで使用可否を管理）
   isGuarding: boolean;     // ガード状態かどうか
   knockoutTurnsRemaining: number; // 撃破後の復活待ちターン数（0なら行動可能）
 }

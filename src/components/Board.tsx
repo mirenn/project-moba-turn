@@ -68,7 +68,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     ? G.players[currentAction.team].champions.find(c => c.id === currentAction.championId)
     : null;
   const resolvingCard = resolvingChampion && currentAction && !('discardCardIds' in currentAction.action)
-    ? resolvingChampion.hand.find(c => c.id === (currentAction.action as any).cardId)
+    ? resolvingChampion.cards.find(c => c.id === (currentAction.action as any).cardId)
     : null;
 
   // 代替アクションかどうかを取得
@@ -305,12 +305,13 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
   const handleGuard = () => {
     if (G.gamePhase !== 'planning') return;
-    if (!selectedChampion || selectedChampion.hand.length < 2) return;
+    const availableCards = selectedChampion?.cards.filter(c => c.currentCooldown === 0) || [];
+    if (!selectedChampion || availableCards.length < 2) return;
     if (actingChampionIds.includes(selectedChampion.id)) return;
 
     const cardIds: [string, string] = [
-      selectedChampion.hand[0].id,
-      selectedChampion.hand[1].id
+      availableCards[0].id,
+      availableCards[1].id
     ];
     moves.guard(selectedChampion.id, cardIds);
     setSelectedChampionId(null);
@@ -394,7 +395,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           <div className="grid grid-cols-1 gap-3">
             {myPlayerState.champions.map(champion => {
               const def = getChampionDef(champion);
-              const allCards = [...champion.hand, ...champion.usedCards];
+              const allCards = champion.cards;
               return (
                 <div key={champion.id} className="bg-slate-800 rounded-lg p-3">
                   <div className="text-white font-bold text-sm mb-2">
@@ -602,7 +603,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                 if ('discardCardIds' in action) {
                   actionText = 'ガード';
                 } else {
-                  const card = champion.hand.find(c => c.id === action.cardId);
+                  const card = champion.cards.find(c => c.id === action.cardId);
                   if (action.isAlternativeMove) {
                     actionText = `${card?.nameJa || 'カード'} (1マス移動)`;
                   } else {
@@ -807,8 +808,9 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     </div>
                   ) : (
                     <>
-                      {selectedChampion.hand.map(card => {
+                      {selectedChampion.cards.map(card => {
                         const typeConfig = getTypeConfig(card.type);
+                        const onCooldown = card.currentCooldown > 0;
                         return (
                           <div
                             key={card.id}
@@ -816,15 +818,21 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                           >
                             {/* 通常使用ボタン（カード本体） */}
                             <div
-                              className="flex-1 p-2 rounded border cursor-pointer transition-all border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-yellow-400 group"
-                              onClick={() => handleCardClick(card, false)}
+                              className={`flex-1 p-2 rounded border transition-all group ${onCooldown
+                                ? 'border-slate-700 bg-slate-900 opacity-50 cursor-not-allowed'
+                                : 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-yellow-400 cursor-pointer'
+                                }`}
+                              onClick={() => !onCooldown && handleCardClick(card, false)}
                             >
                               <div className="flex items-center gap-1">
-                                <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
+                                <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5 ${onCooldown ? 'opacity-50' : ''}`}>
                                   {typeConfig.icon}
                                   <span className="text-[10px] text-white">{card.priority}</span>
                                 </div>
-                                <span className="text-xs font-bold group-hover:text-yellow-200">{card.nameJa}</span>
+                                <span className={`text-xs font-bold ${onCooldown ? 'text-slate-500' : 'group-hover:text-yellow-200'}`}>{card.nameJa}</span>
+                                {onCooldown && (
+                                  <span className="ml-auto text-[10px] text-red-400 font-bold">CD: {card.currentCooldown}</span>
+                                )}
                               </div>
                               <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
                                 {card.power > 0 && <span>威力:{card.power}</span>}
@@ -835,10 +843,14 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
                             {/* 代替アクション（移動）ボタン */}
                             <button
-                              className="w-10 flex items-center justify-center rounded border border-slate-600 bg-slate-700 text-green-500 hover:bg-green-700 hover:border-green-400 hover:text-white transition-all shadow-sm"
+                              className={`w-10 flex items-center justify-center rounded border transition-all shadow-sm ${onCooldown
+                                ? 'border-slate-700 bg-slate-900 text-slate-600 cursor-not-allowed opacity-50'
+                                : 'border-slate-600 bg-slate-700 text-green-500 hover:bg-green-700 hover:border-green-400 hover:text-white'
+                                }`}
+                              disabled={onCooldown}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleCardClick(card, true);
+                                if (!onCooldown) handleCardClick(card, true);
                               }}
                               title="代替アクション: 上下左右に1マス移動"
                             >
@@ -848,7 +860,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         );
                       })}
 
-                      {selectedChampion.hand.length >= 2 && (
+                      {selectedChampion.cards.filter(c => c.currentCooldown === 0).length >= 2 && (
                         <button
                           className="p-2 rounded border border-yellow-600 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 text-sm flex items-center justify-center gap-1"
                           onClick={handleGuard}
@@ -875,7 +887,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     const champ = G.players[action.team].champions.find(c => c.id === action.championId);
                     if (!champ) return null;
                     const isGuard = 'discardCardIds' in action.action;
-                    const card = !isGuard ? champ.hand.find(c => c.id === (action.action as any).cardId) : null;
+                    const card = !isGuard ? champ.cards.find(c => c.id === (action.action as any).cardId) : null;
                     const isAltMove = !isGuard && (action.action as any).isAlternativeMove;
                     const isMyTeam = action.team === myPlayerID;
                     const champDef = getChampionDef(champ);
@@ -914,7 +926,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     const champ = G.players[pending.team].champions.find(c => c.id === pending.championId);
                     if (!champ) return null;
                     const isGuard = 'discardCardIds' in pending.action;
-                    const card = !isGuard ? champ.hand.find(c => c.id === (pending.action as any).cardId) : null;
+                    const card = !isGuard ? champ.cards.find(c => c.id === (pending.action as any).cardId) : null;
                     const isAltMove = !isGuard && (pending.action as any).isAlternativeMove;
                     const isMyTeam = pending.team === myPlayerID;
                     const champDef = getChampionDef(champ);
@@ -967,7 +979,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   {champDef?.nameJa || enemyChamp.definitionId} の手札（敵）
                 </h3>
                 <div className="space-y-1 mt-2">
-                  {enemyChamp.hand.map(card => {
+                  {enemyChamp.cards.map(card => {
                     const typeConfig = getTypeConfig(card.type);
                     return (
                       <div key={card.id} className="p-2 rounded border border-red-800/50 bg-red-950/30">

@@ -22,6 +22,8 @@ const gekogekogaCards: Card[] = [
     attackRange: 1,
     effect: '隣接1体に攻撃。成功時、控えと交代',
     effectFn: 'uturn',
+    cooldown: 2,
+    currentCooldown: 0,
   },
   {
     id: 'gekogekoga-mizushuriken',
@@ -34,6 +36,8 @@ const gekogekogaCards: Card[] = [
     attackRange: 1,
     effect: '隣接1体に20ダメージを2〜4回攻撃',
     effectFn: 'multiHit',
+    cooldown: 2,
+    currentCooldown: 0,
   },
   {
     id: 'gekogekoga-akunohadou',
@@ -46,6 +50,8 @@ const gekogekogaCards: Card[] = [
     attackRange: 1,
     effect: '隣接1体に攻撃。20%で相手のこのターンの行動を無効化',
     effectFn: 'flinch',
+    cooldown: 3,
+    currentCooldown: 0,
   },
   {
     id: 'gekogekoga-kageuchi',
@@ -57,6 +63,8 @@ const gekogekogaCards: Card[] = [
     move: 3,
     attackRange: 1,
     effect: '3マス移動後、隣接1体に攻撃',
+    cooldown: 2,
+    currentCooldown: 0,
   },
   {
     id: 'gekogekoga-swap',
@@ -68,6 +76,8 @@ const gekogekogaCards: Card[] = [
     move: 0,
     isSwap: true,
     effect: '控えのチャンピオンと交代する',
+    cooldown: 1,
+    currentCooldown: 0,
   },
 ];
 
@@ -97,6 +107,8 @@ const kidoubaCards: Card[] = [
     attackRange: 0,
     effect: '直線方向に5マスまで移動',
     effectFn: 'linearMove',
+    cooldown: 1,
+    currentCooldown: 0,
   },
   {
     id: 'kidouba-fumitsuke',
@@ -109,6 +121,8 @@ const kidoubaCards: Card[] = [
     attackRange: 1,
     isSurroundingAoE: true,
     effect: '周囲1マス全体に攻撃（発動時に自動発生）',
+    cooldown: 3,
+    currentCooldown: 0,
   },
   {
     id: 'kidouba-ironhead',
@@ -121,6 +135,8 @@ const kidoubaCards: Card[] = [
     attackRange: 1,
     effect: '隣接1体に攻撃。30%で相手をひるませる',
     effectFn: 'flinch',
+    cooldown: 2,
+    currentCooldown: 0,
   },
   {
     id: 'kidouba-swap',
@@ -132,6 +148,8 @@ const kidoubaCards: Card[] = [
     move: 0,
     isSwap: true,
     effect: '控えのチャンピオンと交代する',
+    cooldown: 1,
+    currentCooldown: 0,
   },
 ];
 
@@ -163,6 +181,8 @@ const enshishiCards: Card[] = [
     isDirectional: true,
     lineRange: 2,
     effect: '指定方向に2マス範囲攻撃（ブロックを貫通しない）',
+    cooldown: 3,
+    currentCooldown: 0,
   },
   {
     id: 'enshishi-flaredrive',
@@ -175,6 +195,8 @@ const enshishiCards: Card[] = [
     attackRange: 1,
     effect: '2マス移動後、隣接1体に攻撃。自分も1/3ダメージを受ける',
     effectFn: 'recoil',
+    cooldown: 3,
+    currentCooldown: 0,
   },
   {
     id: 'enshishi-honoonokiba',
@@ -187,6 +209,8 @@ const enshishiCards: Card[] = [
     attackRange: 1,
     effect: '隣接1体に攻撃。10%で相手をやけど状態にする',
     effectFn: 'burn',
+    cooldown: 2,
+    currentCooldown: 0,
   },
   {
     id: 'enshishi-swap',
@@ -198,6 +222,8 @@ const enshishiCards: Card[] = [
     move: 0,
     isSwap: true,
     effect: '控えのチャンピオンと交代する',
+    cooldown: 1,
+    currentCooldown: 0,
   },
 ];
 
@@ -228,6 +254,8 @@ const raichouCards: Card[] = [
     attackRange: 2,
     effect: '2マス以内の1体に攻撃。10%で相手をまひ状態にする',
     effectFn: 'paralyze',
+    cooldown: 3,
+    currentCooldown: 0,
   },
   {
     id: 'raichou-denkousekka',
@@ -239,6 +267,8 @@ const raichouCards: Card[] = [
     move: 2,
     attackRange: 1,
     effect: '2マス移動後、隣接1体に攻撃',
+    cooldown: 1,
+    currentCooldown: 0,
   },
   {
     id: 'raichou-voltchange',
@@ -251,6 +281,8 @@ const raichouCards: Card[] = [
     attackRange: 2,
     effect: '2マス以内の1体に攻撃。成功時、控えと交代',
     effectFn: 'uturn',
+    cooldown: 2,
+    currentCooldown: 0,
   },
   {
     id: 'raichou-swap',
@@ -262,6 +294,8 @@ const raichouCards: Card[] = [
     move: 0,
     isSwap: true,
     effect: '控えのチャンピオンと交代する',
+    cooldown: 1,
+    currentCooldown: 0,
   },
 ];
 

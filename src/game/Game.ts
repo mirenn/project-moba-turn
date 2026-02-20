@@ -260,8 +260,7 @@ function createChampionInstance(
     maxHp: definition.hp,
     currentType: definition.type,
     pos: initialPos,
-    hand: [...definition.cards],
-    usedCards: [],
+    cards: definition.cards.map(c => ({ ...c, currentCooldown: 0 })),
     isGuarding: false,
     knockoutTurnsRemaining: 0,
   };
@@ -389,7 +388,7 @@ const commonMoves = {
       const champion = playerState.champions.find(c => c.id === championId);
       if (!champion || champion.pos === null) return;
       
-      const card = champion.hand.find(c => c.id === cardId);
+      const card = champion.cards.find(c => c.id === cardId && c.currentCooldown === 0);
       if (!card) return;
       
       const currentActions = G.turnActions[team].actions;
@@ -421,8 +420,8 @@ const commonMoves = {
       const champion = playerState.champions.find(c => c.id === championId);
       if (!champion || champion.pos === null) return;
       
-      const card1 = champion.hand.find(c => c.id === discardCardIds[0]);
-      const card2 = champion.hand.find(c => c.id === discardCardIds[1]);
+      const card1 = champion.cards.find(c => c.id === discardCardIds[0] && c.currentCooldown === 0);
+      const card2 = champion.cards.find(c => c.id === discardCardIds[1] && c.currentCooldown === 0);
       if (!card1 || !card2) return;
       
       const currentActions = G.turnActions[team].actions;
@@ -474,7 +473,7 @@ const commonMoves = {
           
           let priority = 0;
           if (!('discardCardIds' in action)) {
-            const card = champion.hand.find(c => c.id === action.cardId);
+            const card = champion.cards.find(c => c.id === action.cardId);
             priority = card?.priority || 0;
           }
           
@@ -532,7 +531,7 @@ const commonMoves = {
 
       // 代替アクション以外でカード情報を取得
       const card = !cardAction.isAlternativeMove 
-        ? champion.hand.find(c => c.id === cardAction.cardId) 
+        ? champion.cards.find(c => c.id === cardAction.cardId) 
         : null;
 
       // 解決の可否を判定
@@ -633,12 +632,11 @@ const commonMoves = {
       const champion = G.players[team].champions.find(c => c.id === action.championId);
       
       if (champion && !('discardCardIds' in action)) {
-        const card = champion.hand.find(c => c.id === action.cardId);
+        const card = champion.cards.find(c => c.id === action.cardId);
         if (card) {
           G.turnLog.push(`${getChampionDisplayName(champion)} は ${card.nameJa} の使用をスキップした`);
-          // カードは消費される
-          champion.hand = champion.hand.filter(c => c.id !== card.id);
-          champion.usedCards.push(card);
+          // スキップしてもCDは消費する
+          card.currentCooldown = card.cooldown;
         }
       }
       
@@ -769,7 +767,7 @@ const commonMoves = {
 
       const champion = player.champions.find(c => c.id === championId);
       if (!champion) return;
-      const card = [...champion.hand, ...champion.usedCards].find(c => c.id === cardId);
+      const card = champion.cards.find(c => c.id === cardId);
       if (!card) return;
 
       const currentBonus = upgradeType === 'power' ? (card.bonusPower ?? 0) : (card.bonusMove ?? 0);
@@ -801,7 +799,7 @@ const commonMoves = {
       const cpuPlayer = G.players['1'];
       const cpuChampions = cpuPlayer.champions;
       for (const champ of cpuChampions) {
-        const cards = [...champ.hand, ...champ.usedCards]
+        const cards = champ.cards
           .filter(c => c.power > 0)
           .sort((a, b) => b.power - a.power);
         for (const c of cards) {
@@ -1048,14 +1046,14 @@ function processNextAction(G: GameState, random: any) {
   // プレイヤーの行動: ターゲット選択待ち
   if (team === '0') {
     G.awaitingTargetSelection = true;
-    const card = champion.hand.find(c => c.id === action.cardId);
+    const card = champion.cards.find(c => c.id === action.cardId);
     G.turnLog.push(`[あなたの番] ${getChampionDisplayName(champion)} の ${card?.nameJa || 'カード'} - ターゲットを選択してください`);
     return;
   }
   
   // CPUの行動: ディレイ表示のためにここで一旦停止
   // ターゲットを事前に決定してアクションに設定
-  const card = champion.hand.find(c => c.id === action.cardId);
+  const card = champion.cards.find(c => c.id === action.cardId);
   if (card) {
     const { targetPos, targetChampionId } = selectCPUTarget(
       G, 
@@ -1081,9 +1079,11 @@ function resolveGuardAction(G: GameState, action: GuardAction, team: Team) {
   if (!champion || !champion.pos) return;
   
   champion.isGuarding = true;
-  champion.hand = champion.hand.filter(c => 
-    c.id !== action.discardCardIds[0] && c.id !== action.discardCardIds[1]
-  );
+  // ガードで使った2枚のカードにCDをセット
+  for (const cardId of action.discardCardIds) {
+    const card = champion.cards.find(c => c.id === cardId);
+    if (card) card.currentCooldown = card.cooldown;
+  }
   G.turnLog.push(`${getChampionDisplayName(champion)} がガード状態になった`);
 }
 
@@ -1099,7 +1099,7 @@ function resolveCardAction(
   const champion = G.players[team].champions.find(c => c.id === action.championId);
   if (!champion || !champion.pos) return;
   
-  const card = champion.hand.find(c => c.id === action.cardId);
+  const card = champion.cards.find(c => c.id === action.cardId);
   if (!card) return;
   
   const championDef = getChampionById(champion.definitionId);
@@ -1132,9 +1132,8 @@ function resolveCardAction(
         }
       }
     }
-    // カードを消費
-    champion.hand = champion.hand.filter(c => c.id !== card.id);
-    champion.usedCards.push(card);
+    // カードにCDをセット
+    card.currentCooldown = card.cooldown;
     return;
   }
   
@@ -1173,8 +1172,7 @@ function resolveCardAction(
   
   // 勝利が確定している場合は攻撃処理をスキップ
   if (G.winner) {
-    champion.hand = champion.hand.filter(c => c.id !== card.id);
-    champion.usedCards.push(card);
+    card.currentCooldown = card.cooldown;
     return;
   }
   
@@ -1485,9 +1483,8 @@ function resolveCardAction(
     }
   }
   
-  // カードを消費
-  champion.hand = champion.hand.filter(c => c.id !== card.id);
-  champion.usedCards.push(card);
+  // カードにCDをセット
+  card.currentCooldown = card.cooldown;
 }
 
 // 方向優先順位（決定論的経路のため固定: 上→右→下→左）
@@ -1667,6 +1664,9 @@ function finishResolutionPhase(G: GameState, random: any) {
   // 撃破カウントダウン
   processKnockoutCountdown(G);
   
+  // カードクールダウンをデクリメント
+  tickCardCooldowns(G);
+  
   // ★ 新ルール: 接続チェック - 3マス未満の連結成分を消去
   removeDisconnectedTerritories(G);
   
@@ -1691,7 +1691,6 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.turnInPhase = 1;
     G.currentPhase++;
     isNewPhase = true;
-    refillCards(G);
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
     
     // フェイズ終了時のゴールド付与
@@ -1778,17 +1777,19 @@ function processKnockoutCountdown(G: GameState) {
   }
 }
 
-function refillCards(G: GameState) {
+/**
+ * ターン終了時に全カードのCDを1デクリメント
+ */
+function tickCardCooldowns(G: GameState) {
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
-      const definition = getChampionById(champion.definitionId);
-      if (definition) {
-        champion.hand = [...definition.cards];
-        champion.usedCards = [];
+      for (const card of champion.cards) {
+        if (card.currentCooldown > 0) {
+          card.currentCooldown--;
+        }
       }
     }
   }
-  G.turnLog.push('全チャンピオンのカードが補充された');
 }
 
 function getChampionDisplayName(champion: ChampionInstance): string {
