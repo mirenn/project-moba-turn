@@ -991,12 +991,14 @@ export const LoLBoardGame = {
     if (G.scores['1'] >= VICTORY_SCORE) return { winner: '1' };
     
     // 全員ひんし敗北判定: フィールド上のチャンピオンが0体になったチームの負け
-    // （ベンチ・復活待ちの有無は問わず、今動かせるユニットがいない = 敗北）
-    for (const team of ['0', '1'] as Team[]) {
-      const enemyTeam = team === '0' ? '1' : '0';
-      const hasFieldChampion = G.players[team].champions.some(c => c.pos !== null);
-      if (!hasFieldChampion) {
-        return { winner: enemyTeam };
+    // ただし配置フェーズ中（deploy）は判定しない（まだ誰も配置していないため）
+    if (G.gamePhase !== 'deploy') {
+      for (const team of ['0', '1'] as Team[]) {
+        const enemyTeam = team === '0' ? '1' : '0';
+        const hasFieldChampion = G.players[team].champions.some(c => c.pos !== null);
+        if (!hasFieldChampion) {
+          return { winner: enemyTeam };
+        }
       }
     }
     

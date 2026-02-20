@@ -351,8 +351,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           フェイズ {G.currentPhase} / ターン {G.turnInPhase}
         </div>
         <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'planning' ? 'bg-blue-600' :
-            G.gamePhase === 'resolution' ? 'bg-orange-600' :
-              G.gamePhase === 'upgrade' ? 'bg-purple-600' : 'bg-green-600'
+          G.gamePhase === 'resolution' ? 'bg-orange-600' :
+            G.gamePhase === 'upgrade' ? 'bg-purple-600' : 'bg-green-600'
           }`}>
           {G.gamePhase === 'planning' ? '計画フェーズ' :
             G.gamePhase === 'resolution' ? '解決フェーズ' :
@@ -428,8 +428,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                             {card.power > 0 && (
                               <button
                                 className={`px-2 py-1 text-[10px] rounded font-bold transition-all ${!canUpgradePower || powerBonus >= 40
-                                    ? 'bg-slate-600 text-slate-500 cursor-not-allowed'
-                                    : 'bg-orange-700 hover:bg-orange-600 text-white cursor-pointer'
+                                  ? 'bg-slate-600 text-slate-500 cursor-not-allowed'
+                                  : 'bg-orange-700 hover:bg-orange-600 text-white cursor-pointer'
                                   }`}
                                 disabled={!canUpgradePower || powerBonus >= 40}
                                 onClick={() => moves.upgradeCard(champion.id, card.id, 'power')}
@@ -440,8 +440,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                             {card.move > 0 && (
                               <button
                                 className={`px-2 py-1 text-[10px] rounded font-bold transition-all ${!canUpgradeMove || moveBonus >= 2
-                                    ? 'bg-slate-600 text-slate-500 cursor-not-allowed'
-                                    : 'bg-green-700 hover:bg-green-600 text-white cursor-pointer'
+                                  ? 'bg-slate-600 text-slate-500 cursor-not-allowed'
+                                  : 'bg-green-700 hover:bg-green-600 text-white cursor-pointer'
                                   }`}
                                 disabled={!canUpgradeMove || moveBonus >= 2}
                                 onClick={() => moves.upgradeCard(champion.id, card.id, 'move')}
@@ -1046,7 +1046,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             </div>
             <button
               className="mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('r', Date.now().toString());
+                window.location.href = url.toString();
+              }}
             >
               もう一度プレイ
             </button>
