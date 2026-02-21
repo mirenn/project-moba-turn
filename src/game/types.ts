@@ -3,7 +3,7 @@ export type TerritoryOwner = Team | null; // 陣地の所有者（nullは未塗�
 export type UnitType = 'champion';
 
 // ポケモン風の属性タイプ
-export type ElementType = 
+export type ElementType =
   | 'normal'   // ノーマル
   | 'fire'     // ほのお
   | 'water'    // みず
@@ -48,7 +48,6 @@ export interface Card {
   attackRange?: number;    // 攻撃範囲（省略時は移動ありなら1、なしなら2）
   effect?: string;         // 特殊効果の説明
   effectFn?: string;       // 効果処理の識別子
-  isSwap?: boolean;        // 交代カードかどうか
   isDirectional?: boolean; // 方向指定攻撃かどうか
   lineRange?: number;      // 直線範囲（方向指定攻撃用）
   isSurroundingAoE?: boolean; // 周囲1マス全体攻撃かどうか
@@ -157,33 +156,33 @@ export interface GameState {
   turnLog: string[];
   gamePhase: 'deploy' | 'planning' | 'resolution' | 'upgrade'; // ゲームフェーズ
   winner: Team | null;
-  
+
   // 陣取り用
   territory: TerritoryOwner[][]; // 13x13の陣地マップ
   scores: Record<Team, number>;   // 各チームのスコア（累積獲得ポイント）
-  
+
   // ポイントトークン用
   pointTokens: PointToken[];      // ボード上のポイントトークン
   pendingPointTokens: PendingPointToken[];  // 予告トークン（次ターンで実体化）
-  
+
   // 解決フェーズ用
   pendingActions: PendingAction[];  // 解決待ち行動キュー（優先度順）
   currentResolvingAction: PendingAction | null; // 現在解決中の行動
   awaitingTargetSelection: boolean; // プレイヤーのターゲット選択待ちかどうか
-  
+
   // 配置フェーズ用
   deployTurn?: Team; // 現在配置をおこなうチーム
-  
+
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー
   cpuActionDelay: number;       // CPUアクション実行中のディレイトークン（0=無効、>0=ディレイ中）
-  
+
   // ホームマス（最初のチャンピオン配置マス、永続的に保護される）
   homeSquares: Record<Team, Position[]>;
-  
+
   // 障害物ブロック
   blocks: Block[];
-  
+
   // アップグレードフェーズ用
   upgradeConfirmed: Record<Team, boolean>; // 各チームがアップグレード確定済みか
 }

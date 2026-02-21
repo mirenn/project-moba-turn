@@ -1,11 +1,11 @@
 import { ActivePlayers, TurnOrder } from 'boardgame.io/core';
-import { 
-  GameState, 
-  Position, 
-  Team, 
+import {
+  GameState,
+  Position,
+  Team,
   TerritoryOwner,
-  ChampionInstance, 
-  PlayerState, 
+  ChampionInstance,
+  PlayerState,
   CardAction,
   GuardAction,
   TurnAction,
@@ -70,21 +70,21 @@ const INITIAL_BLOCKS: Omit<Block, 'hp'>[] = [
 // 陣地を塗る
 export function paintTile(G: GameState, x: number, y: number, team: Team): void {
   if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return;
-  
+
   // ホームマスチェック：相手のホームマスは塗れない
   const enemyTeam = team === '0' ? '1' : '0';
   const isEnemyHomeSquare = G.homeSquares[enemyTeam].some(
     pos => pos.x === x && pos.y === y
   );
   if (isEnemyHomeSquare) return; // 相手のホームマスは保護
-  
+
   G.territory[y][x] = team;
 }
 
 // スコアを計算（現在の陣地面積）
 export function calculateScores(G: GameState): void {
   const scores: Record<Team, number> = { '0': 0, '1': 0 };
-  
+
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
       const owner = G.territory[y][x];
@@ -94,7 +94,7 @@ export function calculateScores(G: GameState): void {
       }
     }
   }
-  
+
   G.scores = scores;
 }
 
@@ -120,7 +120,7 @@ function spawnPointTokens(G: GameState, random: any): void {
 
   // 2. 新しい予告トークンを生成（2~4個）- 5~10ターンで決着がつくよう増量
   const numTokens = 2 + Math.floor(random.Number() * 3);
-  
+
   for (let i = 0; i < numTokens; i++) {
     let x: number, y: number, attempts = 0;
     do {
@@ -137,21 +137,21 @@ function spawnPointTokens(G: GameState, random: any): void {
       attempts++;
     } while (
       (G.pointTokens.some(t => t.x === x && t.y === y) ||
-       G.pendingPointTokens.some(t => t.x === x && t.y === y)) && 
+        G.pendingPointTokens.some(t => t.x === x && t.y === y)) &&
       attempts < 50
     );
-    
+
     if (attempts < 50) {
       // 中央エリア(Admin Domain)は高価値ポイント（5pt）が非常に出やすい
       const isCenter = isAdminDomain(x, y);
       // 中央: 80%で5pt、それ以外: 20%で5pt
       const isHighValue = isCenter ? random.Number() < 0.8 : random.Number() < 0.2;
-      
+
       G.pendingPointTokens.push({
         x, y,
         value: isHighValue ? 5 : 1
       });
-      
+
       G.turnLog.push(`💫 ポイント予告: (${x}, ${y}) に ${isHighValue ? '5pt' : '1pt'} が次ターン出現予定`);
     }
   }
@@ -163,12 +163,12 @@ function removeDisconnectedTerritories(G: GameState): void {
     { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
     { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
   ];
-  
+
   for (const team of ['0', '1'] as Team[]) {
     const visited: boolean[][] = Array(BOARD_SIZE)
       .fill(null)
       .map(() => Array(BOARD_SIZE).fill(false));
-    
+
     for (let y = 0; y < BOARD_SIZE; y++) {
       for (let x = 0; x < BOARD_SIZE; x++) {
         if (G.territory[y][x] === team && !visited[y][x]) {
@@ -177,37 +177,37 @@ function removeDisconnectedTerritories(G: GameState): void {
           const queue: Position[] = [{ x, y }];
           visited[y][x] = true;
           let hasHomeSquare = false; // ホームマスを含むかどうか
-          
+
           while (queue.length > 0) {
             const pos = queue.shift()!;
             component.push(pos);
-            
+
             // ホームマスかどうかチェック
             if (G.homeSquares[team].some(hs => hs.x === pos.x && hs.y === pos.y)) {
               hasHomeSquare = true;
             }
-            
+
             for (const dir of directions) {
               const nx = pos.x + dir.dx;
               const ny = pos.y + dir.dy;
-              
-              if (nx >= 0 && nx < BOARD_SIZE && 
-                  ny >= 0 && ny < BOARD_SIZE &&
-                  !visited[ny][nx] && 
-                  G.territory[ny][nx] === team) {
+
+              if (nx >= 0 && nx < BOARD_SIZE &&
+                ny >= 0 && ny < BOARD_SIZE &&
+                !visited[ny][nx] &&
+                G.territory[ny][nx] === team) {
                 visited[ny][nx] = true;
                 queue.push({ x: nx, y: ny });
               }
             }
           }
-          
+
           // チャンピオンがいるマスかどうかチェック
-          const hasChampion = component.some(pos => 
-            G.players[team].champions.some(c => 
+          const hasChampion = component.some(pos =>
+            G.players[team].champions.some(c =>
               c.pos !== null && c.pos.x === pos.x && c.pos.y === pos.y
             )
           );
-          
+
           // ホームマスまたはチャンピオンに接続している場合は消滅しない
           // そうでなければ4マス未満の連結成分を消去
           if (!hasHomeSquare && !hasChampion && component.length < 4) {
@@ -225,7 +225,7 @@ function removeDisconnectedTerritories(G: GameState): void {
 // 塗られた陣地上のポイントトークンを獲得
 function collectPointsFromTerritory(G: GameState): void {
   const collectedTokens: PointToken[] = [];
-  
+
   for (const token of G.pointTokens) {
     const owner = G.territory[token.y][token.x];
     if (owner !== null) {
@@ -234,7 +234,7 @@ function collectPointsFromTerritory(G: GameState): void {
       G.turnLog.push(`${owner === '0' ? '青' : '赤'}チームが ${token.value}pt 獲得！(${token.x}, ${token.y})`);
     }
   }
-  
+
   // 獲得したトークンを削除
   G.pointTokens = G.pointTokens.filter(t => !collectedTokens.includes(t));
 }
@@ -244,14 +244,14 @@ function getDistance(p1: Position, p2: Position): number {
 }
 
 function createChampionInstance(
-  definitionId: string, 
-  team: Team, 
+  definitionId: string,
+  team: Team,
   instanceIndex: number,
   initialPos: Position | null
 ): ChampionInstance | null {
   const definition = getChampionById(definitionId);
   if (!definition) return null;
-  
+
   return {
     id: `${team}-${definitionId}-${instanceIndex}`,
     definitionId,
@@ -290,22 +290,22 @@ export function getSpawnPositions(): Position[] {
 export function isValidDeployPosition(G: GameState, pos: Position, excludeId?: string): boolean {
   // 1. 盤面内チェック
   if (pos.x < 0 || pos.x >= BOARD_SIZE || pos.y < 0 || pos.y >= BOARD_SIZE) return false;
-  
+
   // 2. 中央3x3 (Admin Domain) は配置不可
   if (isAdminDomain(pos.x, pos.y)) return false;
-  
+
   // 3. 他のチャンピオンとの距離チェック
   const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
   for (const c of allChampions) {
     if (c.id === excludeId) continue;
     if (c.pos === null) continue;
-    
+
     const distance = getDistance(pos, c.pos);
     if (distance < DEPLOY_MIN_DISTANCE) {
       return false; // 距離が近すぎる
     }
   }
-  
+
   return true;
 }
 
@@ -316,13 +316,13 @@ function getInitialPositions(team: Team): Position[] {
 
 function initializePlayerState(team: Team, championIds: string[]): PlayerState {
   const initialPositions = getInitialPositions(team);
-  
+
   const champions: ChampionInstance[] = championIds.map((defId, idx) => {
     // 初期配置はnull（展開フェーズで配置）
     const pos = null;
     return createChampionInstance(defId, team, idx, pos);
   }).filter((c): c is ChampionInstance => c !== null);
-  
+
   return {
     team,
     selectedChampionIds: championIds,
@@ -338,534 +338,511 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
 function autoCPUDeploy(G: GameState): void {
   const cpuTeam: Team = '1';
   const cpuPlayer = G.players[cpuTeam];
-  
+
   // まだ配置されていないチャンピオン（ノックアウトされていない、HP > 0）
-  const undeployedChampion = cpuPlayer.champions.find(c => 
+  const undeployedChampion = cpuPlayer.champions.find(c =>
     c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
   );
-  
+
   if (!undeployedChampion) return; // 配置可能なチャンピオンがいない
-  
+
   // 既にフィールドに3体いる場合は配置しない
   const deployedCount = cpuPlayer.champions.filter(c => c.pos !== null).length;
   if (deployedCount >= 3) return;
-  
+
   // 新AIを使って最適な配置位置を選択
   const bestPos = selectCPUDeployPosition(G, undeployedChampion, cpuTeam);
-  
+
   if (bestPos) {
     undeployedChampion.pos = { x: bestPos.x, y: bestPos.y };
-    
+
     // ホームマス登録（CPU チームの初回配置フェーズの3体まで）
     if (G.homeSquares[cpuTeam].length < 3) {
       G.homeSquares[cpuTeam].push({ x: bestPos.x, y: bestPos.y });
       paintTile(G, bestPos.x, bestPos.y, cpuTeam);
       G.turnLog.push(`(${bestPos.x}, ${bestPos.y}) がホームマスとして登録されました`);
     }
-    
+
     G.turnLog.push(`${getChampionDisplayName(undeployedChampion)} を (${bestPos.x}, ${bestPos.y}) に配置しました`);
   }
 }
 
 
 const ELEMENT_TYPES: ElementType[] = [
-  'normal', 'fire', 'water', 'electric', 'grass', 'ice', 'fighting', 'poison', 'ground', 
+  'normal', 'fire', 'water', 'electric', 'grass', 'ice', 'fighting', 'poison', 'ground',
   'flying', 'psychic', 'bug', 'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy'
 ];
 
 const commonMoves = {
-    // 計画フェーズ: カードを選択
-    selectCard: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string,
-      cardId: string,
-      isAlternativeMove?: boolean
-    ) => {
-      if (G.gamePhase !== 'planning') return;
-      
-      const team = playerID as Team;
-      const playerState = G.players[team];
-      
-      const champion = playerState.champions.find(c => c.id === championId);
-      if (!champion || champion.pos === null) return;
-      
-      const card = champion.cards.find(c => c.id === cardId && c.currentCooldown === 0);
-      if (!card) return;
-      
-      const currentActions = G.turnActions[team].actions;
-      if (currentActions.length >= 2) return;
-      
-      const alreadyActing = currentActions.some(a => a.championId === championId);
-      if (alreadyActing) return;
-      
-      const action: CardAction = {
-        championId,
-        cardId,
-        isAlternativeMove: isAlternativeMove || false,
-      };
-      
-      G.turnActions[team].actions.push(action);
-    },
-    
-    // 計画フェーズ: ガード選択
-    guard: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string,
-      discardCardIds: [string, string]
-    ) => {
-      if (G.gamePhase !== 'planning') return;
-      
-      const team = playerID as Team;
-      const playerState = G.players[team];
-      
-      const champion = playerState.champions.find(c => c.id === championId);
-      if (!champion || champion.pos === null) return;
-      
-      const card1 = champion.cards.find(c => c.id === discardCardIds[0] && c.currentCooldown === 0);
-      const card2 = champion.cards.find(c => c.id === discardCardIds[1] && c.currentCooldown === 0);
-      if (!card1 || !card2) return;
-      
-      const currentActions = G.turnActions[team].actions;
-      if (currentActions.length >= 2) return;
-      
-      const alreadyActing = currentActions.some(a => a.championId === championId);
-      if (alreadyActing) return;
-      
-      const action: GuardAction = {
-        championId,
-        discardCardIds,
-      };
-      
-      G.turnActions[team].actions.push(action);
-    },
-    
-    // 行動キャンセル
-    cancelAction: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string
-    ) => {
-      if (G.gamePhase !== 'planning') return;
-      const team = playerID as Team;
-      G.turnActions[team].actions = G.turnActions[team].actions.filter(
-        a => a.championId !== championId
-      );
-    },
-    
-    // 計画確定 → 解決フェーズへ
-    confirmPlan: ({ G, random }: { G: GameState; random: any }) => {
-      if (G.gamePhase !== 'planning') return;
-      
-      const activeChampionsCount = G.players['0'].champions.filter(c => c.pos !== null).length;
-      const requiredActions = Math.min(2, activeChampionsCount);
-      
-      if (G.turnActions['0'].actions.length < requiredActions) return;
-      
-      // CPUの行動を自動選択（新AI）
-      const cpuActions = selectCPUActions(G, '1');
-      G.turnActions['1'].actions = cpuActions;
-      
-      // 全行動を優先度順にソート
-      const allActions: PendingAction[] = [];
-      
-      for (const team of ['0', '1'] as Team[]) {
-        for (const action of G.turnActions[team].actions) {
-          const champion = G.players[team].champions.find(c => c.id === action.championId);
-          if (!champion) continue;
-          
-          let priority = 0;
-          if (!('discardCardIds' in action)) {
-            const card = champion.cards.find(c => c.id === action.cardId);
-            priority = card?.priority || 0;
-          }
-          
-          allActions.push({
-            action,
-            team,
-            priority,
-            championId: action.championId,
-          });
-        }
-      }
-      
-      // 優先度の高い順にソート
-      allActions.sort((a, b) => b.priority - a.priority);
-      
-      G.pendingActions = allActions;
-      G.gamePhase = 'resolution';
-      G.turnLog.push('--- 解決フェーズ開始 ---');
-      
-      // 最初の行動を設定
-      processNextAction(G, random);
-    },
-    
-    // 解決フェーズ: ターゲットを選択して実行
-    selectTarget: (
-      { G, random }: { G: GameState; random: any },
-      targetPos?: Position,
-      targetChampionId?: string,
-      skipAttack?: boolean,
-      attackDirection?: Position
-    ) => {
-      if (G.gamePhase !== 'resolution') return;
-      if (!G.currentResolvingAction) return;
-      if (!G.awaitingTargetSelection) return;
-      
-      const { action, team } = G.currentResolvingAction;
-      const champion = G.players[team].champions.find(c => c.id === action.championId);
-      if (!champion) return;
+  // 計画フェーズ: カードを選択
+  selectCard: (
+    { G, playerID }: { G: GameState; playerID: string },
+    championId: string,
+    cardId: string,
+    isAlternativeMove?: boolean
+  ) => {
+    if (G.gamePhase !== 'planning') return;
 
-      // ガードの場合はターゲット不要
-      if ('discardCardIds' in action) {
-        resolveGuardAction(G, action, team);
-        G.awaitingTargetSelection = false;
-        G.currentResolvingAction = null;
-        processNextAction(G, random);
-        return;
-      }
+    const team = playerID as Team;
+    const playerState = G.players[team];
 
-      const cardAction = action as CardAction;
+    const champion = playerState.champions.find(c => c.id === championId);
+    if (!champion || champion.pos === null) return;
 
-      // 入力を更新 (undefinedでない場合のみ上書き)
-      if (targetPos) cardAction.targetPos = targetPos;
-      if (targetChampionId) cardAction.targetChampionId = targetChampionId;
-      if (attackDirection) cardAction.attackDirection = attackDirection;
+    const card = champion.cards.find(c => c.id === cardId && c.currentCooldown === 0);
+    if (!card) return;
 
-      // 代替アクション以外でカード情報を取得
-      const card = !cardAction.isAlternativeMove 
-        ? champion.cards.find(c => c.id === cardAction.cardId) 
-        : null;
+    const currentActions = G.turnActions[team].actions;
+    if (currentActions.length >= 2) return;
 
-      // 解決の可否を判定
-      let readyToResolve = true;
+    const alreadyActing = currentActions.some(a => a.championId === championId);
+    if (alreadyActing) return;
 
-      // 0. 方向指定攻撃の場合：方向が設定されていれば即解決
-      if (card && card.isDirectional && cardAction.attackDirection) {
-        // 方向が設定されているので即解決
-        readyToResolve = true;
-      }
-      // 1. 代替アクションの場合：移動先が必須
-      else if (cardAction.isAlternativeMove) {
-        if (!cardAction.targetPos) readyToResolve = false;
-      } 
-      // 2. カードアクションの場合
-      else if (card) {
-        // A. 移動が必要な場合、移動先チェック
-        if (card.move > 0 && !cardAction.targetPos) {
-          readyToResolve = false;
+    const action: CardAction = {
+      championId,
+      cardId,
+      isAlternativeMove: isAlternativeMove || false,
+    };
+
+    G.turnActions[team].actions.push(action);
+  },
+
+  // 計画フェーズ: ガード選択
+  guard: (
+    { G, playerID }: { G: GameState; playerID: string },
+    championId: string,
+    discardCardIds: [string, string]
+  ) => {
+    if (G.gamePhase !== 'planning') return;
+
+    const team = playerID as Team;
+    const playerState = G.players[team];
+
+    const champion = playerState.champions.find(c => c.id === championId);
+    if (!champion || champion.pos === null) return;
+
+    const card1 = champion.cards.find(c => c.id === discardCardIds[0] && c.currentCooldown === 0);
+    const card2 = champion.cards.find(c => c.id === discardCardIds[1] && c.currentCooldown === 0);
+    if (!card1 || !card2) return;
+
+    const currentActions = G.turnActions[team].actions;
+    if (currentActions.length >= 2) return;
+
+    const alreadyActing = currentActions.some(a => a.championId === championId);
+    if (alreadyActing) return;
+
+    const action: GuardAction = {
+      championId,
+      discardCardIds,
+    };
+
+    G.turnActions[team].actions.push(action);
+  },
+
+  // 行動キャンセル
+  cancelAction: (
+    { G, playerID }: { G: GameState; playerID: string },
+    championId: string
+  ) => {
+    if (G.gamePhase !== 'planning') return;
+    const team = playerID as Team;
+    G.turnActions[team].actions = G.turnActions[team].actions.filter(
+      a => a.championId !== championId
+    );
+  },
+
+  // 計画確定 → 解決フェーズへ
+  confirmPlan: ({ G, random }: { G: GameState; random: any }) => {
+    if (G.gamePhase !== 'planning') return;
+
+    const activeChampionsCount = G.players['0'].champions.filter(c => c.pos !== null).length;
+    const requiredActions = Math.min(2, activeChampionsCount);
+
+    if (G.turnActions['0'].actions.length < requiredActions) return;
+
+    // CPUの行動を自動選択（新AI）
+    const cpuActions = selectCPUActions(G, '1');
+    G.turnActions['1'].actions = cpuActions;
+
+    // 全行動を優先度順にソート
+    const allActions: PendingAction[] = [];
+
+    for (const team of ['0', '1'] as Team[]) {
+      for (const action of G.turnActions[team].actions) {
+        const champion = G.players[team].champions.find(c => c.id === action.championId);
+        if (!champion) continue;
+
+        let priority = 0;
+        if (!('discardCardIds' in action)) {
+          const card = champion.cards.find(c => c.id === action.cardId);
+          priority = card?.priority || 0;
         }
 
-        // B. 攻撃が必要な場合
-        // 条件: 攻撃力がある AND 攻撃スキップされていない
-        if (card.power > 0 && !skipAttack) {
-          // すでにターゲット指定済みならOK
-          if (cardAction.targetChampionId) {
-            // OK
-          } else {
-            // ターゲット未指定の場合、
-            // 「そもそも攻撃可能な対象がいるか」を判定する
-            const effectivePos = cardAction.targetPos || champion.pos;
-            if (!effectivePos) {
-              // 移動先も未定なら判定不能なのでfalse
-               readyToResolve = false;
-            } else {
-              const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
-              const enemyTeam = team === '0' ? '1' : '0';
-              
-              // 敵チャンピオンチェック
-              const hasEnemyChampion = G.players[enemyTeam].champions.some(c => 
-                c.pos !== null && getDistance(effectivePos, c.pos) <= attackRange
-              );
-              
-              if (hasEnemyChampion) {
-                // 対象がいるのに選択されていない -> 待機
-                readyToResolve = false;
-              } else {
-                // 対象がいない -> 攻撃ステップは完了とみなす(スキップ)
-                // 明示的にスキップログを出しても良いが、解決関数内で処理されないだけ
-              }
-            }
-          }
-        }
+        allActions.push({
+          action,
+          team,
+          priority,
+          championId: action.championId,
+        });
+      }
+    }
 
-        if (card.isSwap) {
-          if (!cardAction.targetChampionId) {
-             // 交代対象（ベンチ）の指定が必須
-             // ベンチに交代可能なユニットがいるか確認
-             const benchChampions = G.players[team].champions.filter(c => 
-               c.pos === null && c.knockoutTurnsRemaining === 0
-             );
-             
-             if (benchChampions.length > 0) {
-                readyToResolve = false; 
-             } else {
-                // 交代相手がいない場合はそのまま実行（効果不発）
-                readyToResolve = true; 
-             }
-          } else {
-             // 指定されたIDが本当に自軍のベンチか検証
-             const targetChamp = G.players[team].champions.find(c => c.id === cardAction.targetChampionId);
-             if (!targetChamp || targetChamp.pos !== null) {
-                // 不正なターゲット
-                readyToResolve = false; 
-             }
-          }
-        }
-      }
+    // 優先度の高い順にソート
+    allActions.sort((a, b) => b.priority - a.priority);
 
-      // すべての情報が揃ったら解決
-      if (readyToResolve) {
-        resolveCardAction(G, cardAction, team, random);
-        G.awaitingTargetSelection = false;
-        G.currentResolvingAction = null;
-        processNextAction(G, random);
-      } else {
-        // まだ情報が足りない場合、ステートを更新して待機継続
-        console.log('Waiting for more targets...', cardAction);
-      }
-    },
-    
-    // 解決フェーズ: スキップ（移動・攻撃しない）
-    skipAction: ({ G, random }: { G: GameState; random: any }) => {
-      if (G.gamePhase !== 'resolution') return;
-      if (!G.currentResolvingAction) return;
-      
-      const { action, team } = G.currentResolvingAction;
-      const champion = G.players[team].champions.find(c => c.id === action.championId);
-      
-      if (champion && !('discardCardIds' in action)) {
-        const card = champion.cards.find(c => c.id === action.cardId);
-        if (card) {
-          G.turnLog.push(`${getChampionDisplayName(champion)} は ${card.nameJa} の使用をスキップした`);
-          // スキップしてもCDは消費する
-          card.currentCooldown = card.cooldown;
-        }
-      }
-      
+    G.pendingActions = allActions;
+    G.gamePhase = 'resolution';
+    G.turnLog.push('--- 解決フェーズ開始 ---');
+
+    // 最初の行動を設定
+    processNextAction(G, random);
+  },
+
+  // 解決フェーズ: ターゲットを選択して実行
+  selectTarget: (
+    { G, random }: { G: GameState; random: any },
+    targetPos?: Position,
+    targetChampionId?: string,
+    skipAttack?: boolean,
+    attackDirection?: Position
+  ) => {
+    if (G.gamePhase !== 'resolution') return;
+    if (!G.currentResolvingAction) return;
+    if (!G.awaitingTargetSelection) return;
+
+    const { action, team } = G.currentResolvingAction;
+    const champion = G.players[team].champions.find(c => c.id === action.championId);
+    if (!champion) return;
+
+    // ガードの場合はターゲット不要
+    if ('discardCardIds' in action) {
+      resolveGuardAction(G, action, team);
       G.awaitingTargetSelection = false;
       G.currentResolvingAction = null;
       processNextAction(G, random);
-    },
+      return;
+    }
 
-    // CPUアクション実行（ディレイ後にUIから呼ばれる）
-    continueCPUAction: ({ G, random }: { G: GameState; random: any }) => {
-      console.log('[DEBUG] continueCPUAction called', {
-        gamePhase: G.gamePhase,
-        cpuActionDelay: G.cpuActionDelay,
-        currentResolvingAction: G.currentResolvingAction
-      });
-      if (G.gamePhase !== 'resolution') {
-        console.log('[DEBUG] Returning: not in resolution phase');
-        return;
+    const cardAction = action as CardAction;
+
+    // 入力を更新 (undefinedでない場合のみ上書き)
+    if (targetPos) cardAction.targetPos = targetPos;
+    if (targetChampionId) cardAction.targetChampionId = targetChampionId;
+    if (attackDirection) cardAction.attackDirection = attackDirection;
+
+    // 代替アクション以外でカード情報を取得
+    const card = !cardAction.isAlternativeMove
+      ? champion.cards.find(c => c.id === cardAction.cardId)
+      : null;
+
+    // 解決の可否を判定
+    let readyToResolve = true;
+
+    // 0. 方向指定攻撃の場合：方向が設定されていれば即解決
+    if (card && card.isDirectional && cardAction.attackDirection) {
+      // 方向が設定されているので即解決
+      readyToResolve = true;
+    }
+    // 1. 代替アクションの場合：移動先が必須
+    else if (cardAction.isAlternativeMove) {
+      if (!cardAction.targetPos) readyToResolve = false;
+    }
+    // 2. カードアクションの場合
+    else if (card) {
+      // A. 移動が必要な場合、移動先チェック
+      if (card.move > 0 && !cardAction.targetPos) {
+        readyToResolve = false;
       }
-      if (G.cpuActionDelay === 0) {
-        console.log('[DEBUG] Returning: cpuActionDelay is 0');
-        return;
+
+      // B. 攻撃が必要な場合
+      // 条件: 攻撃力がある AND 攻撃スキップされていない
+      if (card.power > 0 && !skipAttack) {
+        // すでにターゲット指定済みならOK
+        if (cardAction.targetChampionId) {
+          // OK
+        } else {
+          // ターゲット未指定の場合、
+          // 「そもそも攻撃可能な対象がいるか」を判定する
+          const effectivePos = cardAction.targetPos || champion.pos;
+          if (!effectivePos) {
+            // 移動先も未定なら判定不能なのでfalse
+            readyToResolve = false;
+          } else {
+            const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
+            const enemyTeam = team === '0' ? '1' : '0';
+
+            // 敵チャンピオンチェック
+            const hasEnemyChampion = G.players[enemyTeam].champions.some(c =>
+              c.pos !== null && getDistance(effectivePos, c.pos) <= attackRange
+            );
+
+            if (hasEnemyChampion) {
+              // 対象がいるのに選択されていない -> 待機
+              readyToResolve = false;
+            } else {
+              // 対象がいない -> 攻撃ステップは完了とみなす(スキップ)
+              // 明示的にスキップログを出しても良いが、解決関数内で処理されないだけ
+            }
+          }
+        }
       }
-      if (!G.currentResolvingAction) {
-        console.log('[DEBUG] Returning: no currentResolvingAction');
-        return;
-      }
-      
-      const { action, team } = G.currentResolvingAction;
-      
-      // ガードアクションの場合
-      if ('discardCardIds' in action) {
-        resolveGuardAction(G, action, team);
-      } else {
-        // カードアクションの場合（ターゲットは既に設定済み）
-        resolveCardAction(G, action, team, random);
-      }
-      
-      G.cpuActionDelay = 0;
+
+    }
+
+    // すべての情報が揃ったら解決
+    if (readyToResolve) {
+      resolveCardAction(G, cardAction, team, random);
+      G.awaitingTargetSelection = false;
       G.currentResolvingAction = null;
-      console.log('[DEBUG] continueCPUAction completed, calling processNextAction');
       processNextAction(G, random);
-    },
+    } else {
+      // まだ情報が足りない場合、ステートを更新して待機継続
+      console.log('Waiting for more targets...', cardAction);
+    }
+  },
 
-    // 配置フェーズ: チャンピオンを配置
-    deployChampion: (
-      { G, playerID, events }: { G: GameState; playerID: string; events: any },
-      championId: string,
-      x: number,
-      y: number
-    ) => {
-      if (G.gamePhase !== 'deploy') return;
-      
-      // 手番チェック
-      if (G.deployTurn && G.deployTurn !== playerID) return;
+  // 解決フェーズ: スキップ（移動・攻撃しない）
+  skipAction: ({ G, random }: { G: GameState; random: any }) => {
+    if (G.gamePhase !== 'resolution') return;
+    if (!G.currentResolvingAction) return;
 
-      const team = playerID as Team;
-      const player = G.players[team];
-      
-      // 3体制限チェック
-      const deployedCount = player.champions.filter(c => c.pos !== null).length;
-      if (deployedCount >= CHAMPIONS_ON_FIELD) return; // 既に3体フィールドにいる
-      
-      const champion = player.champions.find(c => c.id === championId);
-      if (!champion) return;
-      if (champion.pos !== null) return; // 既に配置済み
-      
-      // 配置位置の妥当性チェック（距離制約含む）
-      const pos = { x, y };
-      if (!isValidDeployPosition(G, pos)) {
-        return; // 配置不可（距離制約違反または中央エリア）
+    const { action, team } = G.currentResolvingAction;
+    const champion = G.players[team].champions.find(c => c.id === action.championId);
+
+    if (champion && !('discardCardIds' in action)) {
+      const card = champion.cards.find(c => c.id === action.cardId);
+      if (card) {
+        G.turnLog.push(`${getChampionDisplayName(champion)} は ${card.nameJa} の使用をスキップした`);
+        // スキップしてもCDは消費する
+        card.currentCooldown = card.cooldown;
       }
-      
-      // 配置実行
-      champion.pos = { x, y };
-      
-      // ホームマス登録（初回配置フェーズの3体まで）
-      // G.currentPhase === 1 かつ G.turnInPhase === 1（ゲーム開始直後）の間に配置された場所をホームマスとする
-      // より簡易に：homeSquaresが3マス未満の間は登録
-      if (G.homeSquares[team].length < 3) {
-        G.homeSquares[team].push({ x, y });
-        paintTile(G, x, y, team);
-        G.turnLog.push(`(${x}, ${y}) がホームマスとして登録されました`);
-      }
-      
-      G.turnLog.push(`${getChampionDisplayName(champion)} を (${x}, ${y}) に配置しました`);
-      
-      // 手番を交代
-      const nextTurn = G.deployTurn === '0' ? '1' : '0';
-      G.deployTurn = nextTurn;
-      
-      // CPUのターン('1')なら自動配置
-      if (nextTurn === '1') {
-        autoCPUDeploy(G);
-        // CPUが配置したら再度プレイヤーの番に戻す
-        G.deployTurn = '0';
-      }
-      
-      // 配置完了チェック（mainフェーズ中の配置用）
-      const team0Deployed = G.players['0'].champions.filter(c => c.pos !== null).length;
-      const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
-      const team0Ready = team0Deployed >= CHAMPIONS_ON_FIELD || G.players['0'].champions.every(c => 
-        c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
-      );
-      const team1Ready = team1Deployed >= CHAMPIONS_ON_FIELD || G.players['1'].champions.every(c => 
-        c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
-      );
-      
-      if (team0Ready && team1Ready) {
-        // 配置完了 → 計画フェーズへ
-        G.gamePhase = 'planning';
-        G.turnLog.push('--- 配置完了: 計画フェーズ開始 ---');
-      }
-      
-      events.endTurn({ next: G.deployTurn });
-    },
+    }
 
-    // アップグレードフェーズ: カードを強化
-    upgradeCard: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string,
-      cardId: string,
-      upgradeType: 'power' | 'move'
-    ) => {
-      if (G.gamePhase !== 'upgrade') return;
-      const team = playerID as Team;
-      const player = G.players[team];
+    G.awaitingTargetSelection = false;
+    G.currentResolvingAction = null;
+    processNextAction(G, random);
+  },
 
-      const champion = player.champions.find(c => c.id === championId);
-      if (!champion) return;
-      const card = champion.cards.find(c => c.id === cardId);
-      if (!card) return;
+  // CPUアクション実行（ディレイ後にUIから呼ばれる）
+  continueCPUAction: ({ G, random }: { G: GameState; random: any }) => {
+    console.log('[DEBUG] continueCPUAction called', {
+      gamePhase: G.gamePhase,
+      cpuActionDelay: G.cpuActionDelay,
+      currentResolvingAction: G.currentResolvingAction
+    });
+    if (G.gamePhase !== 'resolution') {
+      console.log('[DEBUG] Returning: not in resolution phase');
+      return;
+    }
+    if (G.cpuActionDelay === 0) {
+      console.log('[DEBUG] Returning: cpuActionDelay is 0');
+      return;
+    }
+    if (!G.currentResolvingAction) {
+      console.log('[DEBUG] Returning: no currentResolvingAction');
+      return;
+    }
 
-      const currentBonus = upgradeType === 'power' ? (card.bonusPower ?? 0) : (card.bonusMove ?? 0);
-      const maxBonus = upgradeType === 'power' ? UPGRADE_POWER_T2 : UPGRADE_MOVE_T2;
-      if (currentBonus >= maxBonus) return; // 既に最大強化済み
+    const { action, team } = G.currentResolvingAction;
 
-      const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
-      if (player.gold < cost) return; // ゴールド不足
+    // ガードアクションの場合
+    if ('discardCardIds' in action) {
+      resolveGuardAction(G, action, team);
+    } else {
+      // カードアクションの場合（ターゲットは既に設定済み）
+      resolveCardAction(G, action, team, random);
+    }
 
-      player.gold -= cost;
-      if (upgradeType === 'power') {
-        const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
-        card.bonusPower = (card.bonusPower ?? 0) + add;
-        const tier = card.bonusPower >= UPGRADE_POWER_T2 ? 'T2' : 'T1';
-        G.turnLog.push(`💪 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 威力+${card.bonusPower} [${tier}] (-${cost}G)`);
-      } else {
-        const add = currentBonus === 0 ? UPGRADE_MOVE_T1 : UPGRADE_MOVE_T2 - UPGRADE_MOVE_T1;
-        card.bonusMove = (card.bonusMove ?? 0) + add;
-        const tier = card.bonusMove >= UPGRADE_MOVE_T2 ? 'T2' : 'T1';
-        G.turnLog.push(`👟 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 移動+${card.bonusMove} [${tier}] (-${cost}G)`);
-      }
-    },
+    G.cpuActionDelay = 0;
+    G.currentResolvingAction = null;
+    console.log('[DEBUG] continueCPUAction completed, calling processNextAction');
+    processNextAction(G, random);
+  },
 
-    // アップグレードフェーズ: 覚醒
-    awakenChampion: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string
-    ) => {
-      if (G.gamePhase !== 'upgrade') return;
-      const team = playerID as Team;
-      const player = G.players[team];
+  // 配置フェーズ: チャンピオンを配置
+  deployChampion: (
+    { G, playerID, events }: { G: GameState; playerID: string; events: any },
+    championId: string,
+    x: number,
+    y: number
+  ) => {
+    if (G.gamePhase !== 'deploy') return;
 
-      const champion = player.champions.find(c => c.id === championId);
-      if (!champion) return;
-      if (champion.isAwakened) return;
+    // 手番チェック
+    if (G.deployTurn && G.deployTurn !== playerID) return;
 
-      const COST = 10;
-      if (player.gold < COST) return;
+    const team = playerID as Team;
+    const player = G.players[team];
 
-      player.gold -= COST;
-      champion.isAwakened = true;
-      
-      const def = getChampionById(champion.definitionId);
-      if (def?.ultimateCard) {
-        champion.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
-      }
-      
-      G.turnLog.push(`🌟 ${getChampionDisplayName(champion)} が覚醒した！アルティメット技が解禁！ (-${COST}G)`);
-    },
+    // 3体制限チェック
+    const deployedCount = player.champions.filter(c => c.pos !== null).length;
+    if (deployedCount >= CHAMPIONS_ON_FIELD) return; // 既に3体フィールドにいる
 
-    // アップグレードフェーズ: 確定して次のフェーズへ
-    confirmUpgrade: ({ G }: { G: GameState }) => {
-      if (G.gamePhase !== 'upgrade') return;
+    const champion = player.champions.find(c => c.id === championId);
+    if (!champion) return;
+    if (champion.pos !== null) return; // 既に配置済み
 
-      // CPU（チーム1）の自動アップグレード（高威力カードを優先）
-      const cpuPlayer = G.players['1'];
-      const cpuChampions = cpuPlayer.champions;
-      for (const champ of cpuChampions) {
-        // 先に覚醒できるなら覚醒する
-        if (!champ.isAwakened && cpuPlayer.gold >= 10) {
-          cpuPlayer.gold -= 10;
-          champ.isAwakened = true;
-          const def = getChampionById(champ.definitionId);
-          if (def?.ultimateCard) {
-            champ.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
-          }
-          G.turnLog.push(`[CPU] 🌟 ${getChampionDisplayName(champ)} が覚醒した！`);
+    // 配置位置の妥当性チェック（距離制約含む）
+    const pos = { x, y };
+    if (!isValidDeployPosition(G, pos)) {
+      return; // 配置不可（距離制約違反または中央エリア）
+    }
+
+    // 配置実行
+    champion.pos = { x, y };
+
+    // ホームマス登録（初回配置フェーズの3体まで）
+    // G.currentPhase === 1 かつ G.turnInPhase === 1（ゲーム開始直後）の間に配置された場所をホームマスとする
+    // より簡易に：homeSquaresが3マス未満の間は登録
+    if (G.homeSquares[team].length < 3) {
+      G.homeSquares[team].push({ x, y });
+      paintTile(G, x, y, team);
+      G.turnLog.push(`(${x}, ${y}) がホームマスとして登録されました`);
+    }
+
+    G.turnLog.push(`${getChampionDisplayName(champion)} を (${x}, ${y}) に配置しました`);
+
+    // 手番を交代
+    const nextTurn = G.deployTurn === '0' ? '1' : '0';
+    G.deployTurn = nextTurn;
+
+    // CPUのターン('1')なら自動配置
+    if (nextTurn === '1') {
+      autoCPUDeploy(G);
+      // CPUが配置したら再度プレイヤーの番に戻す
+      G.deployTurn = '0';
+    }
+
+    // 配置完了チェック（mainフェーズ中の配置用）
+    const team0Deployed = G.players['0'].champions.filter(c => c.pos !== null).length;
+    const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
+    const team0Ready = team0Deployed >= CHAMPIONS_ON_FIELD || G.players['0'].champions.every(c =>
+      c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
+    );
+    const team1Ready = team1Deployed >= CHAMPIONS_ON_FIELD || G.players['1'].champions.every(c =>
+      c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
+    );
+
+    if (team0Ready && team1Ready) {
+      // 配置完了 → 計画フェーズへ
+      G.gamePhase = 'planning';
+      G.turnLog.push('--- 配置完了: 計画フェーズ開始 ---');
+    }
+
+    events.endTurn({ next: G.deployTurn });
+  },
+
+  // アップグレードフェーズ: カードを強化
+  upgradeCard: (
+    { G, playerID }: { G: GameState; playerID: string },
+    championId: string,
+    cardId: string,
+    upgradeType: 'power' | 'move'
+  ) => {
+    if (G.gamePhase !== 'upgrade') return;
+    const team = playerID as Team;
+    const player = G.players[team];
+
+    const champion = player.champions.find(c => c.id === championId);
+    if (!champion) return;
+    const card = champion.cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    const currentBonus = upgradeType === 'power' ? (card.bonusPower ?? 0) : (card.bonusMove ?? 0);
+    const maxBonus = upgradeType === 'power' ? UPGRADE_POWER_T2 : UPGRADE_MOVE_T2;
+    if (currentBonus >= maxBonus) return; // 既に最大強化済み
+
+    const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
+    if (player.gold < cost) return; // ゴールド不足
+
+    player.gold -= cost;
+    if (upgradeType === 'power') {
+      const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
+      card.bonusPower = (card.bonusPower ?? 0) + add;
+      const tier = card.bonusPower >= UPGRADE_POWER_T2 ? 'T2' : 'T1';
+      G.turnLog.push(`💪 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 威力+${card.bonusPower} [${tier}] (-${cost}G)`);
+    } else {
+      const add = currentBonus === 0 ? UPGRADE_MOVE_T1 : UPGRADE_MOVE_T2 - UPGRADE_MOVE_T1;
+      card.bonusMove = (card.bonusMove ?? 0) + add;
+      const tier = card.bonusMove >= UPGRADE_MOVE_T2 ? 'T2' : 'T1';
+      G.turnLog.push(`👟 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 移動+${card.bonusMove} [${tier}] (-${cost}G)`);
+    }
+  },
+
+  // アップグレードフェーズ: 覚醒
+  awakenChampion: (
+    { G, playerID }: { G: GameState; playerID: string },
+    championId: string
+  ) => {
+    if (G.gamePhase !== 'upgrade') return;
+    const team = playerID as Team;
+    const player = G.players[team];
+
+    const champion = player.champions.find(c => c.id === championId);
+    if (!champion) return;
+    if (champion.isAwakened) return;
+
+    const COST = 10;
+    if (player.gold < COST) return;
+
+    player.gold -= COST;
+    champion.isAwakened = true;
+
+    const def = getChampionById(champion.definitionId);
+    if (def?.ultimateCard) {
+      champion.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
+    }
+
+    G.turnLog.push(`🌟 ${getChampionDisplayName(champion)} が覚醒した！アルティメット技が解禁！ (-${COST}G)`);
+  },
+
+  // アップグレードフェーズ: 確定して次のフェーズへ
+  confirmUpgrade: ({ G }: { G: GameState }) => {
+    if (G.gamePhase !== 'upgrade') return;
+
+    // CPU（チーム1）の自動アップグレード（高威力カードを優先）
+    const cpuPlayer = G.players['1'];
+    const cpuChampions = cpuPlayer.champions;
+    for (const champ of cpuChampions) {
+      // 先に覚醒できるなら覚醒する
+      if (!champ.isAwakened && cpuPlayer.gold >= 10) {
+        cpuPlayer.gold -= 10;
+        champ.isAwakened = true;
+        const def = getChampionById(champ.definitionId);
+        if (def?.ultimateCard) {
+          champ.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
         }
+        G.turnLog.push(`[CPU] 🌟 ${getChampionDisplayName(champ)} が覚醒した！`);
+      }
 
-        const cards = champ.cards
-          .filter(c => c.power > 0)
-          .sort((a, b) => b.power - a.power);
-        for (const c of cards) {
-          if (cpuPlayer.gold < UPGRADE_COST_T1) break;
-          const currentBonus = c.bonusPower ?? 0;
-          if (currentBonus >= UPGRADE_POWER_T2) continue;
-          const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
-          if (cpuPlayer.gold >= cost) {
-            cpuPlayer.gold -= cost;
-            const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
-            c.bonusPower = currentBonus + add;
-            G.turnLog.push(`[CPU] ${getChampionDisplayName(champ)} の ${c.nameJa} を強化！ 威力+${c.bonusPower}`);
-          }
+      const cards = champ.cards
+        .filter(c => c.power > 0)
+        .sort((a, b) => b.power - a.power);
+      for (const c of cards) {
+        if (cpuPlayer.gold < UPGRADE_COST_T1) break;
+        const currentBonus = c.bonusPower ?? 0;
+        if (currentBonus >= UPGRADE_POWER_T2) continue;
+        const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
+        if (cpuPlayer.gold >= cost) {
+          cpuPlayer.gold -= cost;
+          const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
+          c.bonusPower = currentBonus + add;
+          G.turnLog.push(`[CPU] ${getChampionDisplayName(champ)} の ${c.nameJa} を強化！ 威力+${c.bonusPower}`);
         }
       }
+    }
 
-      // 両チーム確定 → 次フェーズへ
-      G.upgradeConfirmed = { '0': false, '1': false };
-      if (needsDeployPhase(G)) {
-        G.gamePhase = 'deploy';
-        G.deployTurn = '0';
-        G.turnLog.push('--- 配置フェーズ開始 ---');
-      } else {
-        G.gamePhase = 'planning';
-        G.turnLog.push('--- 計画フェーズ開始 ---');
-      }
-    },
+    // 両チーム確定 → 次フェーズへ
+    G.upgradeConfirmed = { '0': false, '1': false };
+    if (needsDeployPhase(G)) {
+      G.gamePhase = 'deploy';
+      G.deployTurn = '0';
+      G.turnLog.push('--- 配置フェーズ開始 ---');
+    } else {
+      G.gamePhase = 'planning';
+      G.turnLog.push('--- 計画フェーズ開始 ---');
+    }
+  },
 };
 
 export const LoLBoardGame = {
@@ -888,7 +865,7 @@ export const LoLBoardGame = {
     // ゲーム開始時に中央エリアに初期ポイントトークン（予告）を配置
     const initialPendingTokens: PendingPointToken[] = [];
     const centerPositions = [
-      { x: 5, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 6 }, 
+      { x: 5, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 6 },
       { x: 6, y: 7 }, { x: 7, y: 6 }
     ];
     // ランダムに3箇所選んで5ptトークンを配置
@@ -909,12 +886,12 @@ export const LoLBoardGame = {
       pendingPointTokens: initialPendingTokens,  // 初期予告トークン（中央に5pt×3）
       currentPhase: 1,
       turnInPhase: 1,
-      turnActions: { 
-        '0': { actions: [] }, 
-        '1': { actions: [] } 
+      turnActions: {
+        '0': { actions: [] },
+        '1': { actions: [] }
       },
       turnLog: [
-        'ゲーム開始 - 13×13ボード（陣取りモード）', 
+        'ゲーム開始 - 13×13ボード（陣取りモード）',
         '【ルール】先に50ポイント到達で勝利！',
         '【新ルール】ポイントトークンを集めよう！',
         '【注意】3マス未満の陣地は消滅します',
@@ -937,7 +914,7 @@ export const LoLBoardGame = {
   moves: {
     ...commonMoves
   },
-  
+
   phases: {
     deploy: {
       start: true,
@@ -955,16 +932,16 @@ export const LoLBoardGame = {
         const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
         // ベンチの数や撃破状態も考慮必要だが、初期配置・再配置フェーズでは
         // 「出撃可能なチャンピオン(knockoutTurns=0)で、まだFieldにいないもの」を出し切るまで、あるいはFieldが3体になるまで
-        
+
         // 簡易判定: Field上限(3)に達しているか、または出せる駒がもうない
         // HP 0のチャンピオンは配置不可として扱う
-        const team0Ready = team0Deployed >= 3 || G.players['0'].champions.every(c => 
+        const team0Ready = team0Deployed >= 3 || G.players['0'].champions.every(c =>
           c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
         );
-        const team1Ready = team1Deployed >= 3 || G.players['1'].champions.every(c => 
+        const team1Ready = team1Deployed >= 3 || G.players['1'].champions.every(c =>
           c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
         );
-        
+
         console.log('[DEBUG] Deploy endIf check:', {
           team0Deployed,
           team1Deployed,
@@ -983,7 +960,7 @@ export const LoLBoardGame = {
             knockout: c.knockoutTurnsRemaining
           }))
         });
-        
+
         return team0Ready && team1Ready;
       },
       onEnd: ({ G }: { G: GameState }) => {
@@ -1010,7 +987,7 @@ export const LoLBoardGame = {
       G.pendingActions = [];
       G.currentResolvingAction = null;
       G.awaitingTargetSelection = false;
-      
+
       for (const team of ['0', '1'] as Team[]) {
         for (const champion of G.players[team].champions) {
           champion.isGuarding = false;
@@ -1018,15 +995,15 @@ export const LoLBoardGame = {
       }
     },
   },
-  
+
   endIf: ({ G }: { G: GameState }) => {
     // 勝利判定: winnerが設定されていればそれを返す
     if (G.winner) return { winner: G.winner };
-    
+
     // スコアベースの勝利判定（50ポイント到達）
     if (G.scores['0'] >= VICTORY_SCORE) return { winner: '0' };
     if (G.scores['1'] >= VICTORY_SCORE) return { winner: '1' };
-    
+
     // 全員ひんし敗北判定: フィールド上のチャンピオンが0体になったチームの負け
     // ただし配置フェーズ中（deploy）は判定しない（まだ誰も配置していないため）
     if (G.gamePhase !== 'deploy') {
@@ -1038,7 +1015,7 @@ export const LoLBoardGame = {
         }
       }
     }
-    
+
     return undefined;
   },
 };
@@ -1052,20 +1029,20 @@ function processNextAction(G: GameState, random: any) {
     finishResolutionPhase(G, random);
     return;
   }
-  
+
   // 次の行動を取得
   const nextAction = G.pendingActions.shift()!;
   G.currentResolvingAction = nextAction;
-  
+
   const { action, team } = nextAction;
   const champion = G.players[team].champions.find(c => c.id === action.championId);
-  
+
   if (!champion || !champion.pos) {
     // チャンピオンが倒されている場合、スキップ
     processNextAction(G, random);
     return;
   }
-  
+
   // ガードアクションの処理
   if ('discardCardIds' in action) {
     if (team === '0') {
@@ -1081,7 +1058,7 @@ function processNextAction(G: GameState, random: any) {
     }
     return;
   }
-  
+
   // プレイヤーの行動: ターゲット選択待ち
   if (team === '0') {
     G.awaitingTargetSelection = true;
@@ -1089,22 +1066,22 @@ function processNextAction(G: GameState, random: any) {
     G.turnLog.push(`[あなたの番] ${getChampionDisplayName(champion)} の ${card?.nameJa || 'カード'} - ターゲットを選択してください`);
     return;
   }
-  
+
   // CPUの行動: ディレイ表示のためにここで一旦停止
   // ターゲットを事前に決定してアクションに設定
   const card = champion.cards.find(c => c.id === action.cardId);
   if (card) {
     const { targetPos, targetChampionId } = selectCPUTarget(
-      G, 
-      champion, 
-      card, 
-      team, 
+      G,
+      champion,
+      card,
+      team,
       !!action.isAlternativeMove // isAlternativeMoveフラグを渡す
     );
     action.targetPos = targetPos;
     action.targetChampionId = targetChampionId;
   }
-  
+
   // CPUアクションディレイを設定（UIが続行を呼ぶまで待機）
   G.cpuActionDelay = Date.now();
   G.turnLog.push(`[CPU] ${getChampionDisplayName(champion)} が ${card?.nameJa || 'カード'} を使用...`);
@@ -1116,7 +1093,7 @@ function processNextAction(G: GameState, random: any) {
 function resolveGuardAction(G: GameState, action: GuardAction, team: Team) {
   const champion = G.players[team].champions.find(c => c.id === action.championId);
   if (!champion || !champion.pos) return;
-  
+
   champion.isGuarding = true;
   // ガードで使った2枚のカードにCDをセット
   for (const cardId of action.discardCardIds) {
@@ -1130,41 +1107,41 @@ function resolveGuardAction(G: GameState, action: GuardAction, team: Team) {
  * カードアクションの解決
  */
 function resolveCardAction(
-  G: GameState, 
-  action: CardAction, 
+  G: GameState,
+  action: CardAction,
   team: Team,
   random: any
 ) {
   const champion = G.players[team].champions.find(c => c.id === action.championId);
   if (!champion || !champion.pos) return;
-  
+
   const card = champion.cards.find(c => c.id === action.cardId);
   if (!card) return;
-  
+
   const championDef = getChampionById(champion.definitionId);
   const championName = getChampionDisplayName(champion);
-  
+
   const enemyTeam = team === '0' ? '1' : '0';
-  
+
   // 代替アクション: 2マス移動（マンハッタン距離2以内）
   if (action.isAlternativeMove) {
     if (action.targetPos) {
       const dist = Math.abs(action.targetPos.x - champion.pos.x) + Math.abs(action.targetPos.y - champion.pos.y);
       const isWithinRange = dist >= 1 && dist <= 2;
-      
+
       if (isWithinRange) {
         const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-        const isOccupied = allChampions.some(c => 
+        const isOccupied = allChampions.some(c =>
           c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
         );
-        
+
         if (!isOccupied) {
           // 移動経路を塗る（チャンピオン位置更新前に経路を計算して塗る）
           const oldPos = { ...champion.pos };
-          
+
           // 移動経路塗り（BFS経路を使用）- 位置更新前に計算
           paintPathBetween(G, oldPos, action.targetPos, team, champion.id);
-          
+
           // チャンピオン位置を更新
           champion.pos = action.targetPos;
           G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した（代替アクション）`);
@@ -1175,70 +1152,70 @@ function resolveCardAction(
     card.currentCooldown = card.cooldown;
     return;
   }
-  
+
   // へんげんじざい特性
   if (championDef?.ability === 'protean' && card.type !== 'normal') {
     champion.currentType = card.type;
     G.turnLog.push(`${championName} は ${getTypeNameJa(card.type)} タイプに変化した！`);
   }
-  
+
   // 移動処理（bonusMoveを加算）
   const effectiveMove = card.move + (card.bonusMove ?? 0);
   if (effectiveMove > 0 && action.targetPos) {
     const dist = getDistance(champion.pos, action.targetPos);
-    
+
     const moveCost = calculateMoveCost(G, champion.pos, action.targetPos, team);
-    
+
     if (moveCost <= effectiveMove) {
       const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-      const isOccupied = allChampions.some(c => 
+      const isOccupied = allChampions.some(c =>
         c.id !== champion.id && c.pos?.x === action.targetPos!.x && c.pos?.y === action.targetPos!.y
       );
-      
+
       if (!isOccupied) {
         // 移動経路を塗る（チャンピオン位置更新前に経路を計算して塗る）
         const oldPos = { ...champion.pos };
-        
+
         // 移動経路塗り（BFS経路を使用）- 位置更新前に計算
         paintPathBetween(G, oldPos, action.targetPos, team, champion.id);
-        
+
         // チャンピオン位置を更新
         champion.pos = action.targetPos;
         G.turnLog.push(`${championName} は (${action.targetPos.x}, ${action.targetPos.y}) に移動した`);
       }
     }
   }
-  
+
   // 勝利が確定している場合は攻撃処理をスキップ
   if (G.winner) {
     card.currentCooldown = card.cooldown;
     return;
   }
-  
+
   // 攻撃処理
   if (card.power > 0) {
     const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
-    
+
     // 攻撃対象位置（ユニットがいるかどうかに関わらず、攻撃した場所は塗れる？）
     // ユーザー要望: "攻撃を行うマスにも塗ることができます"
-    
+
     // ターゲット指定座標があればそこを塗る
     let targetPos = action.targetPos;
-    
+
     // 方向指定攻撃（かえんほうしゃ等）の処理
     if (card.isDirectional && action.attackDirection && card.lineRange) {
       const dir = action.attackDirection;
       const lineRange = card.lineRange;
-      
+
       G.turnLog.push(`${championName} の ${card.nameJa}！`);
-      
+
       for (let i = 1; i <= lineRange; i++) {
         const tx = champion.pos.x + dir.x * i;
         const ty = champion.pos.y + dir.y * i;
-        
+
         // 盤面外チェック
         if (tx < 0 || tx >= BOARD_SIZE || ty < 0 || ty >= BOARD_SIZE) break;
-        
+
         // ブロックチェック（当たったら終了）
         const block = G.blocks.find(b => b.x === tx && b.y === ty);
         if (block) {
@@ -1251,9 +1228,9 @@ function resolveCardAction(
           }
           break; // 貫通しない
         }
-        
+
         // 敵チャンピオンチェック
-        const enemy = G.players[enemyTeam].champions.find(c => 
+        const enemy = G.players[enemyTeam].champions.find(c =>
           c.pos !== null && c.pos.x === tx && c.pos.y === ty
         );
         if (enemy) {
@@ -1264,7 +1241,7 @@ function resolveCardAction(
             champion.currentType,
             enemy.currentType
           );
-          
+
           let finalDamage = damage;
           if (enemy.isGuarding) {
             finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
@@ -1276,9 +1253,9 @@ function resolveCardAction(
             finalDamage = Math.max(1, finalDamage - 10);
             G.turnLog.push(`${getChampionDisplayName(enemy)} の装甲が発動！ダメージ軽減`);
           }
-          
+
           enemy.currentHp -= finalDamage;
-          
+
           G.damageEvents.push({
             id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             targetId: enemy.id,
@@ -1287,11 +1264,11 @@ function resolveCardAction(
             element: card.type,
             timestamp: Date.now(),
           });
-          
+
           let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
-          
+
           // 撃破処理
           if (enemy.currentHp <= 0) {
             enemy.pos = null;
@@ -1302,7 +1279,7 @@ function resolveCardAction(
             G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
           }
         }
-        
+
         // 攻撃範囲を塗る
         paintTile(G, tx, ty, team);
       }
@@ -1310,21 +1287,21 @@ function resolveCardAction(
     // 周囲1マス全体攻撃（ふみつけ等）の処理
     else if (card.isSurroundingAoE) {
       G.turnLog.push(`${championName} の ${card.nameJa}！`);
-      
+
       // 8方向（周囲1マス）をすべて攻撃
       const surroundingDirs = [
         { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
-        { dx: -1, dy: 0 },                      { dx: 1, dy: 0 },
-        { dx: -1, dy: 1 },  { dx: 0, dy: 1 },  { dx: 1, dy: 1 },
+        { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+        { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 },
       ];
-      
+
       for (const dir of surroundingDirs) {
         const tx = champion.pos.x + dir.dx;
         const ty = champion.pos.y + dir.dy;
-        
+
         // 盤面外チェック
         if (tx < 0 || tx >= BOARD_SIZE || ty < 0 || ty >= BOARD_SIZE) continue;
-        
+
         // ブロックへのダメージ
         const block = G.blocks.find(b => b.x === tx && b.y === ty);
         if (block) {
@@ -1335,9 +1312,9 @@ function resolveCardAction(
             G.turnLog.push(`ブロックが破壊された！`);
           }
         }
-        
+
         // 敵チャンピオンへのダメージ
-        const enemy = G.players[enemyTeam].champions.find(c => 
+        const enemy = G.players[enemyTeam].champions.find(c =>
           c.pos !== null && c.pos.x === tx && c.pos.y === ty
         );
         if (enemy) {
@@ -1348,7 +1325,7 @@ function resolveCardAction(
             champion.currentType,
             enemy.currentType
           );
-          
+
           let finalDamage = damage;
           if (enemy.isGuarding) {
             finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
@@ -1360,9 +1337,9 @@ function resolveCardAction(
             finalDamage = Math.max(1, finalDamage - 10);
             G.turnLog.push(`${getChampionDisplayName(enemy)} の装甲が発動！ダメージ軽減`);
           }
-          
+
           enemy.currentHp -= finalDamage;
-          
+
           G.damageEvents.push({
             id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             targetId: enemy.id,
@@ -1371,11 +1348,11 @@ function resolveCardAction(
             element: card.type,
             timestamp: Date.now(),
           });
-          
+
           let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
-          
+
           // 撃破処理
           if (enemy.currentHp <= 0) {
             enemy.pos = null;
@@ -1391,7 +1368,7 @@ function resolveCardAction(
             }
           }
         }
-        
+
         // 攻撃範囲を塗る
         paintTile(G, tx, ty, team);
       }
@@ -1399,12 +1376,12 @@ function resolveCardAction(
     // 通常の単体ターゲット攻撃
     else if (action.targetChampionId) {
       const target = G.players[enemyTeam].champions.find(c => c.id === action.targetChampionId);
-      
+
       if (target && target.pos) {
         targetPos = target.pos; // ターゲットの位置を塗る座標とする
-        
+
         const dist = getDistance(champion.pos, target.pos);
-        
+
         if (dist <= attackRange) {
           const effectivePower3 = card.power + (card.bonusPower ?? 0);
           const { damage, effectiveness } = calculateDamage(
@@ -1413,29 +1390,29 @@ function resolveCardAction(
             champion.currentType,
             target.currentType
           );
-          
+
           let finalDamage = damage;
           if (target.isGuarding) {
             finalDamage = Math.floor(damage * GUARD_DAMAGE_REDUCTION);
             G.turnLog.push(`${getChampionDisplayName(target)} はガードしている！`);
           }
-          
+
           // みずしゅりけん
           if (card.effectFn === 'multiHit') {
             const hits = 2 + Math.floor(random.Number() * 3);
             finalDamage = finalDamage * hits;
             G.turnLog.push(`${championName} の ${card.nameJa}！ ${hits}回ヒット！`);
           }
-          
+
           // 装甲特性: 被ダメージを10軽減（みずしゅりけんは合計ダメージから軽減）
           const targetDef = getChampionById(target.definitionId);
           if (targetDef?.ability === 'steelArmor') {
             finalDamage = Math.max(1, finalDamage - 10);
             G.turnLog.push(`${getChampionDisplayName(target)} の装甲が発動！ダメージ軽減`);
           }
-          
+
           target.currentHp -= finalDamage;
-          
+
           // ダメージイベントを追加（アニメーション用）
           G.damageEvents.push({
             id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -1445,24 +1422,24 @@ function resolveCardAction(
             element: card.type,
             timestamp: Date.now(),
           });
-          
+
           let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
-          
+
           // 撃破処理（即時）- HPが0以下になったら即座に盤面から消す
           if (target.currentHp <= 0) {
-             target.pos = null;
-             target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
-             target.currentHp = 0;
-             const bounty = target.isAwakened ? 5 : 0;
-             G.scores[team] += KILL_POINTS + bounty;
-             G.players[team].gold += GOLD_PER_KILL;
-             if (bounty > 0) {
-               G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(target)} を討ち取った！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
-             } else {
-               G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
-             }
+            target.pos = null;
+            target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
+            target.currentHp = 0;
+            const bounty = target.isAwakened ? 5 : 0;
+            G.scores[team] += KILL_POINTS + bounty;
+            G.players[team].gold += GOLD_PER_KILL;
+            if (bounty > 0) {
+              G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(target)} を討ち取った！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+            } else {
+              G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+            }
           }
 
           // ノックバック（撃破されていない場合のみ）
@@ -1471,70 +1448,53 @@ function resolveCardAction(
             const dy = target.pos.y - champion.pos.y;
             const newX = target.pos.x + (dx !== 0 ? Math.sign(dx) : 0);
             const newY = target.pos.y + (dy !== 0 ? Math.sign(dy) : 0);
-            
+
             if (newX >= 0 && newX < BOARD_SIZE && newY >= 0 && newY < BOARD_SIZE) {
               target.pos = { x: newX, y: newY };
               G.turnLog.push(`${getChampionDisplayName(target)} は押し出された！`);
             }
           }
-          
+
           // 反動
           if (card.effectFn === 'recoil') {
             const recoilDamage = Math.floor(finalDamage / 3);
             champion.currentHp -= recoilDamage;
             G.turnLog.push(`${championName} は反動で ${recoilDamage} ダメージを受けた`);
           }
-          
+
           // 撃破処理は checkKnockouts で
         } else {
           G.turnLog.push(`${championName} の ${card.nameJa}！ しかし ${getChampionDisplayName(target)} に届かなかった...`);
         }
       }
     }
-    
+
     // 攻撃によって床を塗る処理
     if (targetPos) {
-       paintTile(G, targetPos.x, targetPos.y, team);
-       // 範囲攻撃の場合は周囲も塗るなどの拡張が可能だが、一旦単体対象のみ
+      paintTile(G, targetPos.x, targetPos.y, team);
+      // 範囲攻撃の場合は周囲も塗るなどの拡張が可能だが、一旦単体対象のみ
     }
-    
+
     // タワーへの攻撃ロジックは削除
   }
-  
+
   // 交代処理
-  if (card.isSwap || card.effectFn === 'uturn') {
-    let benchChampion: ChampionInstance | undefined;
-    
-    if (card.isSwap && action.targetChampionId) {
-      // 指定されたベンチのチャンピオンと交代
-      benchChampion = G.players[team].champions.find(c => c.id === action.targetChampionId);
-      
-      // バリデーション (念のため)
-      if (benchChampion && (benchChampion.pos !== null || benchChampion.knockoutTurnsRemaining > 0)) {
-        benchChampion = undefined; 
-      }
-    } 
-    
-    // ターゲット指定がない（とんぼがえり等、または自動選択フォールバック）場合
-    if (!benchChampion) {
-       benchChampion = G.players[team].champions.find(c => 
-        c.pos === null && c.knockoutTurnsRemaining === 0
-      );
-    }
-    
+  // 交代処理（とんぼがえり/ボルトチェンジ等）
+  if (card.effectFn === 'uturn') {
+    let benchChampion = G.players[team].champions.find(c =>
+      c.pos === null && c.knockoutTurnsRemaining === 0
+    );
+
     if (benchChampion) {
       // 交代実行
       benchChampion.pos = { ...champion.pos };
       champion.pos = null;
       G.turnLog.push(`${championName} と ${getChampionDisplayName(benchChampion)} が交代した！`);
-      
-      // 交代後のユニットは行動済み扱いにはならない（次のフェイズで行動可能だが、
-      // このターン中は行動できない。仕様次第だが、ここでは単に配置が変わるだけ）
     } else {
       G.turnLog.push(`${championName} は交代しようとしたが、控えがいなかった！`);
     }
   }
-  
+
   // カードにCDをセット
   card.currentCooldown = card.cooldown;
 }
@@ -1553,18 +1513,18 @@ function isObstacle(G: GameState, x: number, y: number, movingChampionId?: strin
   if (G.blocks.some(b => b.x === x && b.y === y)) {
     return true;
   }
-  
+
   // チャンピオン判定（移動中のチャンピオン自身は除外）
   const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-  if (allChampions.some(c => 
-    c.pos !== null && 
-    c.pos.x === x && 
-    c.pos.y === y && 
+  if (allChampions.some(c =>
+    c.pos !== null &&
+    c.pos.x === x &&
+    c.pos.y === y &&
     c.id !== movingChampionId
   )) {
     return true;
   }
-  
+
   return false;
 }
 
@@ -1587,41 +1547,41 @@ export function findReachablePositionsWithPath(
 ): Map<string, { cost: number; path: Position[] }> {
   const result = new Map<string, { cost: number; path: Position[] }>();
   const posKey = (p: Position) => `${p.x},${p.y}`;
-  
+
   // 開始位置
   result.set(posKey(start), { cost: 0, path: [start] });
-  
+
   // BFSキュー: { pos, cost, path }
   const queue: { pos: Position; cost: number; path: Position[] }[] = [
     { pos: start, cost: 0, path: [start] }
   ];
-  
+
   while (queue.length > 0) {
     // コスト順にソート（Dijkstra風、自陣コスト0のため）
     queue.sort((a, b) => a.cost - b.cost);
     const current = queue.shift()!;
-    
+
     for (const dir of DIRECTIONS) {
       const nx = current.pos.x + dir.dx;
       const ny = current.pos.y + dir.dy;
-      
+
       // 盤面外チェック
       if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) continue;
-      
+
       // 障害物チェック（チャンピオン・ブロック）
       if (isObstacle(G, nx, ny, movingChampionId)) continue;
-      
+
       // 移動コスト計算（自陣は0.5、それ以外は1）
       // 自陣は2マスで1移動距離を消費
       const tileCost = G.territory[ny][nx] === team ? 0.5 : 1;
       const newCost = current.cost + tileCost;
-      
+
       // 最大コストを超えたらスキップ
       if (newCost > maxCost) continue;
-      
+
       const key = posKey({ x: nx, y: ny });
       const existing = result.get(key);
-      
+
       // より低いコストで到達できるか、まだ訪問していない場合
       if (!existing || existing.cost > newCost) {
         const newPath = [...current.path, { x: nx, y: ny }];
@@ -1630,10 +1590,10 @@ export function findReachablePositionsWithPath(
       }
     }
   }
-  
+
   // 開始位置は除外（自分自身への移動は不要）
   result.delete(posKey(start));
-  
+
   return result;
 }
 
@@ -1658,12 +1618,12 @@ export function findPathBetween(
 // ヘルパー関数: 移動コスト計算 (BFS)（障害物考慮）
 function calculateMoveCost(G: GameState, start: Position, end: Position, team: Team, movingChampionId?: string): number {
   if (start.x === end.x && start.y === end.y) return 0;
-  
+
   // 障害物を考慮した経路探索
   const reachable = findReachablePositionsWithPath(G, start, Infinity, team, movingChampionId);
   const key = `${end.x},${end.y}`;
   const result = reachable.get(key);
-  
+
   return result ? result.cost : Infinity;
 }
 
@@ -1692,7 +1652,7 @@ function paintPathBetween(G: GameState, start: Position, end: Position, team: Te
 function needsDeployPhase(G: GameState): boolean {
   for (const team of ['0', '1'] as Team[]) {
     const deployedCount = G.players[team].champions.filter(c => c.pos !== null).length;
-    const canDeployMore = G.players[team].champions.some(c => 
+    const canDeployMore = G.players[team].champions.some(c =>
       c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
     );
     // 3体未満で、かつ配置可能なチャンピオンがいる
@@ -1709,33 +1669,33 @@ function needsDeployPhase(G: GameState): boolean {
 function finishResolutionPhase(G: GameState, random: any) {
   // 撃破チェック
   checkKnockouts(G);
-  
+
   // ベンチ回復
   processBenchRecovery(G);
-  
+
   // 撃破カウントダウン
   processKnockoutCountdown(G);
-  
+
   // カードクールダウンをデクリメント
   tickCardCooldowns(G);
-  
+
   // ★ 新ルール: 接続チェック - 3マス未満の連結成分を消去
   removeDisconnectedTerritories(G);
-  
+
   // ★ 新ルール: ポイント獲得 - 陣地上のトークンを回収
   collectPointsFromTerritory(G);
-  
+
   // ★ 旧ルール削除: 囲い塗りは廃止
   // detectAndFillEnclosures(G, '0');
   // detectAndFillEnclosures(G, '1');
   // calculateScores(G);  // スコアはポイント獲得ベースに変更
-  
+
   // スコアログ
   G.turnLog.push(`スコア - 青: ${G.scores['0']}pt, 赤: ${G.scores['1']}pt`);
-  
+
   // ★ 新ルール: ポイントトークン生成
   spawnPointTokens(G, random);
-  
+
   // ターン/フェイズ進行
   G.turnInPhase++;
   let isNewPhase = false;
@@ -1744,7 +1704,7 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.currentPhase++;
     isNewPhase = true;
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
-    
+
     // フェイズ終了時のゴールド付与
     const lowerScoreTeam = G.scores['0'] <= G.scores['1'] ? '0' : '1';
     for (const team of ['0', '1'] as Team[]) {
@@ -1754,22 +1714,22 @@ function finishResolutionPhase(G: GameState, random: any) {
       G.turnLog.push(`💰 ${team === '0' ? '青' : '赤'}チーム: +${earned}G (所持: ${G.players[team].gold}G)`);
     }
   }
-  
+
   // 状態リセット
   G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
   G.pendingActions = [];
   G.currentResolvingAction = null;
   G.awaitingTargetSelection = false;
-  
+
   // ガード状態リセット
   for (const team of ['0', '1'] as Team[]) {
     for (const champion of G.players[team].champions) {
       champion.isGuarding = false;
     }
   }
-  
+
   G.turnLog.push('--- ターン終了 ---');
-  
+
   // フェーズ開始時はアップグレードフェーズを挟む
   if (isNewPhase) {
     G.gamePhase = 'upgrade';
@@ -1799,12 +1759,12 @@ function checkKnockouts(G: GameState) {
         champion.pos = null;
         champion.knockoutTurnsRemaining = KNOCKOUT_TURNS;
         champion.currentHp = 0;
-        
+
         const enemyTeam = team === '0' ? '1' : '0';
         const bounty = champion.isAwakened ? 5 : 0;
         G.scores[enemyTeam] += KILL_POINTS + bounty;
         G.players[enemyTeam].gold += GOLD_PER_KILL;
-        
+
         if (bounty > 0) {
           G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
         } else {

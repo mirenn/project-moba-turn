@@ -520,11 +520,9 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               ? '緑のマスをクリックして移動先を選択（2マス以内）'
               : (resolvingCard && resolvingCard.isDirectional
                 ? '攻撃する方向を選択してください'
-                : (resolvingCard && resolvingCard.isSwap
-                  ? 'ベンチのチャンピオンをクリックして交代対象を選択'
-                  : (resolvingCard && resolvingCard.move > 0
-                    ? '緑のマスをクリックして移動先を選択'
-                    : '赤い敵をクリックして攻撃対象を選択')))}
+                : (resolvingCard && resolvingCard.move > 0
+                  ? '緑のマスをクリックして移動先を選択'
+                  : '赤い敵をクリックして攻撃対象を選択'))}
           </div>
 
           {/* 方向指定攻撃の場合: 4方向ボタン */}
@@ -579,17 +577,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   ? 'border-red-800 bg-red-950 opacity-50'
                   : selectedChampionId === champion.id
                     ? 'border-yellow-400 bg-yellow-900/50 cursor-pointer ring-2 ring-yellow-400'
-                    : isResolutionPhase && isAwaitingTarget && resolvingCard?.isSwap && champion.knockoutTurnsRemaining === 0
-                      ? 'border-green-400 bg-green-900/50 cursor-pointer ring-2 ring-green-400 animate-pulse'
-                      : 'border-slate-600 bg-slate-800 cursor-pointer hover:bg-slate-700'
+                    : 'border-slate-600 bg-slate-800 cursor-pointer hover:bg-slate-700'
                   }`}
                 onClick={() => {
                   if (isDeployPhase && isMyDeployTurn && champion.pos === null) {
                     setSelectedChampionId(champion.id);
-                  }
-                  // 解決フェーズ: 交代先の選択
-                  if (isResolutionPhase && isAwaitingTarget && resolvingCard?.isSwap && champion.pos === null) {
-                    moves.selectTarget(undefined, champion.id);
                   }
                 }}
               >
