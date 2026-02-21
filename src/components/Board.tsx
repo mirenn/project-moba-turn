@@ -5,6 +5,7 @@ import { GameState, Team, ChampionInstance, Card, Position, DamageEvent, Block }
 import { getChampionById } from '../game/champions';
 import { getSpawnPositions, isValidDeployPosition, findReachablePositionsWithPath } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
+import { ChampionIcon } from './champions/ChampionIcon';
 
 type Props = BoardProps<GameState>;
 
@@ -572,7 +573,10 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   }
                 }}
               >
-                <div className={`text-xs font-bold ${typeConfig.color}`}>
+                <div className={`text-xs font-bold flex items-center gap-1 ${typeConfig.color}`}>
+                  <div className={`w-5 h-5 flex-shrink-0 ${champion.team === '1' ? 'scale-x-[-1]' : ''}`}>
+                    <ChampionIcon championId={champion.definitionId} isEnemy={champion.team !== myPlayerID} />
+                  </div>
                   {def?.nameJa || champion.definitionId}
                 </div>
                 <div className="text-xs text-slate-400">
@@ -690,30 +694,43 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     <div className="absolute inset-0 border border-yellow-500/30 pointer-events-none"></div>
                   )}
 
-                  {champion && (
-                    <div className={`flex flex-col items-center z-10 ${champion.team === '0' ? 'text-blue-400' : 'text-red-400'}`}>
-                      <div className="relative">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${champion.team === '0' ? 'bg-blue-600' : 'bg-red-600'
-                          }`}>
-                          {getChampionDef(champion)?.nameJa.charAt(0) || '?'}
-                        </div>
-                        <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${getTypeConfig(champion.currentType).bgColor}`}>
-                          {getTypeConfig(champion.currentType).icon}
-                        </div>
-                        {champion.isGuarding && (
-                          <div className="absolute -bottom-1 -right-1 text-yellow-400">
-                            <Shield size={12} />
+                  {champion && (() => {
+                    const isTakingDamage = visibleDamageEvents.some(e => e.x === x && e.y === y);
+                    const isCurrentlyAttacking = isResolvingChamp && G.currentResolvingAction &&
+                      (('cardId' in G.currentResolvingAction.action && G.currentResolvingAction.action.cardId) ||
+                        ('isAlternativeMove' in G.currentResolvingAction.action));
+
+                    let animationClass = 'animate-champion-idle';
+                    if (isTakingDamage) {
+                      animationClass = 'animate-champion-hurt';
+                    } else if (isCurrentlyAttacking) {
+                      animationClass = 'animate-champion-attack';
+                    }
+
+                    return (
+                      <div className={`flex flex-col items-center z-10 ${champion.team === '0' ? 'text-blue-400' : 'text-red-400'} ${animationClass}`}>
+                        <div className="relative">
+                          <div className={`w-9 h-9 ${champion.team === '1' ? 'scale-x-[-1]' : ''}`}>
+                            <ChampionIcon championId={champion.definitionId} isEnemy={champion.team !== myPlayerID} />
                           </div>
-                        )}
-                        {isActing && champion.team === myPlayerID && G.gamePhase === 'planning' && (
-                          <div className="absolute -bottom-1 -left-1 bg-green-500 rounded-full p-0.5">
-                            <Check size={8} className="text-white" />
+                          <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${getTypeConfig(champion.currentType).bgColor} shadow-sm border border-slate-700`}>
+                            {getTypeConfig(champion.currentType).icon}
                           </div>
-                        )}
+                          {champion.isGuarding && (
+                            <div className="absolute -bottom-1 -right-1 text-yellow-400 drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                              <Shield size={12} fill="currentColor" />
+                            </div>
+                          )}
+                          {isActing && champion.team === myPlayerID && G.gamePhase === 'planning' && (
+                            <div className="absolute -bottom-1 -left-1 bg-green-500 rounded-full p-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
+                              <Check size={8} className="text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold mt-[-2px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] text-white">{champion.currentHp}</span>
                       </div>
-                      <span className="text-[10px] font-bold">{champion.currentHp}</span>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <span className="absolute bottom-0 right-0.5 text-[8px] text-slate-500">{x},{y}</span>
 
