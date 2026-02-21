@@ -6,6 +6,7 @@ import { getChampionById } from '../game/champions';
 import { getSpawnPositions, isValidDeployPosition, findReachablePositionsWithPath } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
 import { ChampionIcon } from './champions/ChampionIcon';
+import { AttackEffect } from './effects/AttackEffect';
 
 type Props = BoardProps<GameState>;
 
@@ -792,11 +793,16 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         key={event.id}
                         className="damage-popup absolute inset-0 flex flex-col items-center justify-center z-50 pointer-events-none"
                       >
-                        <span className="text-lg font-bold text-red-400 drop-shadow-lg">
+                        {event.element && (
+                          <div className="absolute inset-0 z-40 animate-effect-pop">
+                            <AttackEffect element={event.element} />
+                          </div>
+                        )}
+                        <span className="text-lg font-bold text-red-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-50">
                           -{event.amount}
                         </span>
                         {event.effectiveness && (
-                          <span className="text-[10px] text-yellow-300 font-bold">
+                          <span className="text-[10px] text-yellow-300 font-bold z-50 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
                             {event.effectiveness}
                           </span>
                         )}

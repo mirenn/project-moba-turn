@@ -129,6 +129,7 @@ export interface DamageEvent {
   targetId: string;     // ダメージを受けたユニットのID
   amount: number;       // ダメージ量
   effectiveness?: string; // 効果（ばつぐん等）
+  element?: ElementType; // 攻撃の属性（エフェクト用）
   timestamp: number;    // 発生時刻
 }
 

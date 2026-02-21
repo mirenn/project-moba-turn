@@ -1245,6 +1245,7 @@ function resolveCardAction(
             targetId: enemy.id,
             amount: finalDamage,
             effectiveness: effectiveness || undefined,
+            element: card.type,
             timestamp: Date.now(),
           });
           
@@ -1328,6 +1329,7 @@ function resolveCardAction(
             targetId: enemy.id,
             amount: finalDamage,
             effectiveness: effectiveness || undefined,
+            element: card.type,
             timestamp: Date.now(),
           });
           
@@ -1396,6 +1398,7 @@ function resolveCardAction(
             targetId: target.id,
             amount: finalDamage,
             effectiveness: effectiveness || undefined,
+            element: card.type,
             timestamp: Date.now(),
           });
           
