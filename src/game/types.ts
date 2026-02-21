@@ -68,6 +68,7 @@ export interface ChampionDefinition {
   ability?: string;        // 特性名
   abilityDesc?: string;    // 特性の説明
   cards: Card[];           // 所持カード（4枚 + 交代カード）
+  ultimateCard?: Card;     // 覚醒時に追加される強力なカード
 }
 
 // ゲーム内のチャンピオンインスタンス
@@ -82,6 +83,7 @@ export interface ChampionInstance {
   cards: Card[];           // 全カード（cooldownで使用可否を管理）
   isGuarding: boolean;     // ガード状態かどうか
   knockoutTurnsRemaining: number; // 撃破後の復活待ちターン数（0なら行動可能）
+  isAwakened: boolean;     // 覚醒状態かどうか（賞金首）
 }
 
 

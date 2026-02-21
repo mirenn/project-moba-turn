@@ -457,6 +457,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                       );
                     })}
                   </div>
+                  {def?.ultimateCard && !champion.isAwakened && (
+                    <div className="mt-2 text-right">
+                      <button
+                        className={`px-3 py-1 text-xs rounded font-bold transition-all shadow-lg ${G.players[myPlayerID].gold >= 10
+                          ? 'bg-yellow-600 hover:bg-yellow-500 text-white animate-pulse'
+                          : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                          }`}
+                        disabled={G.players[myPlayerID].gold < 10}
+                        onClick={() => moves.awakenChampion(champion.id)}
+                      >
+                        🌟 覚醒 (10G) - {def.ultimateCard.nameJa} 解禁
+                      </button>
+                    </div>
+                  )}
+                  {champion.isAwakened && (
+                    <div className="mt-2 text-right text-xs text-yellow-400 font-bold bg-yellow-900/30 inline-block px-2 py-1 rounded ml-auto flex justify-end">
+                      👑 覚醒済み（賞金首）
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -714,6 +733,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                           <div className={`w-9 h-9 ${champion.team === '1' ? 'scale-x-[-1]' : ''}`}>
                             <ChampionIcon championId={champion.definitionId} isEnemy={champion.team !== myPlayerID} />
                           </div>
+                          {champion.isAwakened && (
+                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-[20px] drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] z-20 animate-bounce" title="賞金首 (覚醒)">
+                              👑
+                            </div>
+                          )}
                           <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${getTypeConfig(champion.currentType).bgColor} shadow-sm border border-slate-700`}>
                             {getTypeConfig(champion.currentType).icon}
                           </div>

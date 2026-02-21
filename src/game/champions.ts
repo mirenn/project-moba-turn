@@ -90,6 +90,19 @@ export const GEKOGEKOGA: ChampionDefinition = {
   ability: 'protean',
   abilityDesc: 'へんげんじざい: 技を使用すると、その技のタイプに変化する',
   cards: gekogekogaCards,
+  ultimateCard: {
+    id: 'gekogekoga-ultimate',
+    name: 'hydro-pump',
+    nameJa: 'ハイドロポンプ',
+    type: 'water',
+    priority: 30, // 遅いが超高威力
+    power: 150,
+    move: 0,
+    attackRange: 3,
+    effect: '3マス以内の1体に絶大なダメージ',
+    cooldown: 6,
+    currentCooldown: 0,
+  },
 };
 
 // ========================
@@ -162,6 +175,20 @@ export const KIDOUBA: ChampionDefinition = {
   ability: 'steelArmor',
   abilityDesc: '装甲: 受けるダメージを常時10軽減する',
   cards: kidoubaCards,
+  ultimateCard: {
+    id: 'kidouba-ultimate',
+    name: 'heavy-slam',
+    nameJa: 'ヘビーボンバー',
+    type: 'steel',
+    priority: 40,
+    power: 120,
+    move: 2,
+    attackRange: 1,
+    isSurroundingAoE: true,
+    effect: '2マス移動後、周囲1マスに絶大な全体ダメージ',
+    cooldown: 6,
+    currentCooldown: 0,
+  },
 };
 
 // ========================
@@ -236,6 +263,21 @@ export const ENSHISHI: ChampionDefinition = {
   ability: 'blaze',
   abilityDesc: 'もうか: HPが1/3以下のとき、ほのお技の威力が1.5倍',
   cards: enshishiCards,
+  ultimateCard: {
+    id: 'enshishi-ultimate',
+    name: 'blast-burn',
+    nameJa: 'ブラストバーン',
+    type: 'fire',
+    priority: 35,
+    power: 140,
+    move: 0,
+    attackRange: 3,
+    isDirectional: true,
+    lineRange: 3,
+    effect: '指定方向に3マスの直線絶大ダメージ',
+    cooldown: 6,
+    currentCooldown: 0,
+  },
 };
 
 // ========================
@@ -308,6 +350,20 @@ export const RAICHOU: ChampionDefinition = {
   ability: 'static',
   abilityDesc: 'せいでんき: 接触攻撃を受けたとき、30%で相手をまひ状態にする',
   cards: raichouCards,
+  ultimateCard: {
+    id: 'raichou-ultimate',
+    name: 'thunder',
+    nameJa: 'かみなり',
+    type: 'electric',
+    priority: 130, // 非常に速い
+    power: 110,
+    move: 0,
+    attackRange: 4, // 長射程
+    effect: '4マス以内の1体に先制の雷撃。30%でまひ',
+    effectFn: 'paralyze',
+    cooldown: 6,
+    currentCooldown: 0,
+  },
 };
 
 // ========================

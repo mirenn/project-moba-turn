@@ -263,6 +263,7 @@ function createChampionInstance(
     cards: definition.cards.map(c => ({ ...c, currentCooldown: 0 })),
     isGuarding: false,
     knockoutTurnsRemaining: 0,
+    isAwakened: false,
   };
 }
 
@@ -791,6 +792,33 @@ const commonMoves = {
       }
     },
 
+    // アップグレードフェーズ: 覚醒
+    awakenChampion: (
+      { G, playerID }: { G: GameState; playerID: string },
+      championId: string
+    ) => {
+      if (G.gamePhase !== 'upgrade') return;
+      const team = playerID as Team;
+      const player = G.players[team];
+
+      const champion = player.champions.find(c => c.id === championId);
+      if (!champion) return;
+      if (champion.isAwakened) return;
+
+      const COST = 10;
+      if (player.gold < COST) return;
+
+      player.gold -= COST;
+      champion.isAwakened = true;
+      
+      const def = getChampionById(champion.definitionId);
+      if (def?.ultimateCard) {
+        champion.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
+      }
+      
+      G.turnLog.push(`🌟 ${getChampionDisplayName(champion)} が覚醒した！アルティメット技が解禁！ (-${COST}G)`);
+    },
+
     // アップグレードフェーズ: 確定して次のフェーズへ
     confirmUpgrade: ({ G }: { G: GameState }) => {
       if (G.gamePhase !== 'upgrade') return;
@@ -799,6 +827,17 @@ const commonMoves = {
       const cpuPlayer = G.players['1'];
       const cpuChampions = cpuPlayer.champions;
       for (const champ of cpuChampions) {
+        // 先に覚醒できるなら覚醒する
+        if (!champ.isAwakened && cpuPlayer.gold >= 10) {
+          cpuPlayer.gold -= 10;
+          champ.isAwakened = true;
+          const def = getChampionById(champ.definitionId);
+          if (def?.ultimateCard) {
+            champ.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
+          }
+          G.turnLog.push(`[CPU] 🌟 ${getChampionDisplayName(champ)} が覚醒した！`);
+        }
+
         const cards = champ.cards
           .filter(c => c.power > 0)
           .sort((a, b) => b.power - a.power);
@@ -1342,9 +1381,14 @@ function resolveCardAction(
             enemy.pos = null;
             enemy.knockoutTurnsRemaining = KNOCKOUT_TURNS;
             enemy.currentHp = 0;
-            G.scores[team] += KILL_POINTS;
+            const bounty = enemy.isAwakened ? 5 : 0;
+            G.scores[team] += KILL_POINTS + bounty;
             G.players[team].gold += GOLD_PER_KILL;
-            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+            if (bounty > 0) {
+              G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(enemy)} を討ち取った！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+            } else {
+              G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+            }
           }
         }
         
@@ -1411,9 +1455,14 @@ function resolveCardAction(
              target.pos = null;
              target.knockoutTurnsRemaining = KNOCKOUT_TURNS;
              target.currentHp = 0;
-             G.scores[team] += KILL_POINTS;
+             const bounty = target.isAwakened ? 5 : 0;
+             G.scores[team] += KILL_POINTS + bounty;
              G.players[team].gold += GOLD_PER_KILL;
-             G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+             if (bounty > 0) {
+               G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(target)} を討ち取った！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+             } else {
+               G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+             }
           }
 
           // ノックバック（撃破されていない場合のみ）
@@ -1750,7 +1799,17 @@ function checkKnockouts(G: GameState) {
         champion.pos = null;
         champion.knockoutTurnsRemaining = KNOCKOUT_TURNS;
         champion.currentHp = 0;
-        G.turnLog.push(`${getChampionDisplayName(champion)} は撃破された！`);
+        
+        const enemyTeam = team === '0' ? '1' : '0';
+        const bounty = champion.isAwakened ? 5 : 0;
+        G.scores[enemyTeam] += KILL_POINTS + bounty;
+        G.players[enemyTeam].gold += GOLD_PER_KILL;
+        
+        if (bounty > 0) {
+          G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+        } else {
+          G.turnLog.push(`${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+        }
       }
     }
   }
