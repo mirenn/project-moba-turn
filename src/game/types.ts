@@ -94,6 +94,7 @@ export interface CardAction {
   cardId: string;          // 使用するカードのID
   targetPos?: Position;    // 移動先または攻撃対象位置
   targetChampionId?: string; // 攻撃対象のチャンピオンID
+  attackTargetPos?: Position; // 指定された攻撃対象の位置（ブロックなど、ユニット以外のターゲット用）
   isAlternativeMove?: boolean; // 代替アクション（2マス移動のみ）として使用
   attackDirection?: Position;  // 方向指定攻撃の方向ベクトル（例: {x:1, y:0}=右）
 }

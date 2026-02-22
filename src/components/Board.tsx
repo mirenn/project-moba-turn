@@ -175,8 +175,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     );
   };
 
-  // 攻撃可能な敵（チャンピオン）を計算
-  const getValidAttackTargets = (): ChampionInstance[] => {
+  // 攻撃可能な敵（チャンピオン・ブロック）を計算
+  const getValidAttackTargets = (): (ChampionInstance | Block)[] => {
     if (!resolvingChampion || !resolvingChampion.pos || !resolvingCard) return [];
     if (resolvingCard.power <= 0) return [];
 
@@ -188,13 +188,20 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       attackRange = pendingMovePos ? 1 : 3;
     }
 
-    const targets: ChampionInstance[] = [];
+    const targets: (ChampionInstance | Block)[] = [];
 
     // 敵チャンピオン
     const enemies = G.players[enemyTeam].champions.filter(c => c.pos !== null);
     enemies.forEach(enemy => {
       if (enemy.pos && sourcePos && getDistance(sourcePos, enemy.pos) <= attackRange) {
         targets.push(enemy);
+      }
+    });
+
+    // ブロック（障害物）も攻撃対象に含める
+    G.blocks.forEach(block => {
+      if (sourcePos && getDistance(sourcePos, { x: block.x, y: block.y }) <= attackRange) {
+        targets.push(block);
       }
     });
 
@@ -233,14 +240,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         return;
       }
 
-      // 攻撃対象として選択
+      // 攻撃対象として選択（チャンピオンまたはブロック）
       // 移動ありカードの場合でも、移動先決定後(=validAttackTargetsが更新された後)ならここで選択可能
-      const targetEnemy = validAttackTargets.find(t =>
-        'definitionId' in t && t.pos?.x === x && t.pos?.y === y
-      ) as ChampionInstance | undefined;
+      const targetEnemy = validAttackTargets.find(t => {
+        if ('definitionId' in t) { // ChampionInstanceの場合
+          return t.pos?.x === x && t.pos?.y === y;
+        } else { // Blockの場合
+          return t.x === x && t.y === y;
+        }
+      });
 
       if (targetEnemy) {
-        moves.selectTarget(undefined, targetEnemy.id, undefined);
+        if ('definitionId' in targetEnemy) {
+          // チャンピオンをターゲット
+          moves.selectTarget(undefined, targetEnemy.id, undefined);
+        } else {
+          // ブロックをターゲット（ChampionIdなしでattackTargetPosを渡す）
+          // 引数順: targetPos, targetChampionId, skipAttack, attackDirection, attackTargetPos
+          moves.selectTarget(undefined, undefined, undefined, undefined, { x, y });
+        }
         return;
       }
 
@@ -532,25 +550,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             <div className="flex flex-col items-center gap-1 mb-3">
               <button
                 className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
-                onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: 0, y: -1 })}
+                onClick={() => moves.selectTarget(undefined, undefined, undefined, { x: 0, y: -1 })}
                 title="上方向"
               >↑</button>
               <div className="flex gap-1">
                 <button
                   className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
-                  onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: -1, y: 0 })}
+                  onClick={() => moves.selectTarget(undefined, undefined, undefined, { x: -1, y: 0 })}
                   title="左方向"
                 >←</button>
                 <div className="w-12 h-10 flex items-center justify-center text-slate-400">●</div>
                 <button
                   className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
-                  onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: 1, y: 0 })}
+                  onClick={() => moves.selectTarget(undefined, undefined, undefined, { x: 1, y: 0 })}
                   title="右方向"
                 >→</button>
               </div>
               <button
                 className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
-                onClick={() => moves.selectTarget(undefined, undefined, undefined, false, { x: 0, y: 1 })}
+                onClick={() => moves.selectTarget(undefined, undefined, undefined, { x: 0, y: 1 })}
                 title="下方向"
               >↓</button>
             </div>
@@ -669,7 +687,13 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
               // 解決フェーズのハイライト
               const isMoveTarget = validMoveTargetsMap.has(`${x},${y}`);
-              const isAttackTarget = validAttackTargets.some(t => t.pos && t.pos.x === x && t.pos.y === y);
+              const isAttackTarget = validAttackTargets.some(t => {
+                if ('definitionId' in t) {
+                  return t.pos && t.pos.x === x && t.pos.y === y;
+                } else {
+                  return t.x === x && t.y === y;
+                }
+              });
               const isResolvingChamp = resolvingChampion && champion && resolvingChampion.id === champion.id;
 
               // 経路プレビュー（ホバー中の経路上にあるか）

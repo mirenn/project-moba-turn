@@ -44,6 +44,8 @@ interface ActionCandidate {
   isAlternativeMove: boolean;
   targetPos?: Position;
   targetChampionId?: string;
+  attackTargetPos?: Position;
+  attackDirection?: Position;
 }
 
 interface ScoredAction extends ActionCandidate {
@@ -384,18 +386,51 @@ function generateActionCandidates(
       const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
       
       if (card.power > 0) {
-        // 敵チャンピオンへの攻撃
-        for (const enemy of enemies) {
-          if (!enemy.pos) continue;
-          if (getDistance(attackFrom, enemy.pos) <= attackRange) {
+        if (card.isDirectional) {
+          // 方向指定攻撃の候補
+          const dirs = [
+            { x: 0, y: -1 }, // 上
+            { x: 1, y: 0 },  // 右
+            { x: 0, y: 1 },  // 下
+            { x: -1, y: 0 }, // 左
+          ];
+          for (const dir of dirs) {
             candidates.push({
               championId: champion.id,
               card,
               isGuard: false,
               isAlternativeMove: false,
               targetPos: movePos,
-              targetChampionId: enemy.id,
+              attackDirection: dir,
             });
+          }
+        } else {
+          // 敵チャンピオンへの攻撃
+          for (const enemy of enemies) {
+            if (!enemy.pos) continue;
+            if (getDistance(attackFrom, enemy.pos) <= attackRange) {
+              candidates.push({
+                championId: champion.id,
+                card,
+                isGuard: false,
+                isAlternativeMove: false,
+                targetPos: movePos,
+                targetChampionId: enemy.id,
+              });
+            }
+          }
+          // ブロックへの攻撃
+          for (const block of G.blocks) {
+            if (getDistance(attackFrom, { x: block.x, y: block.y }) <= attackRange) {
+              candidates.push({
+                championId: champion.id,
+                card,
+                isGuard: false,
+                isAlternativeMove: false,
+                targetPos: movePos,
+                attackTargetPos: { x: block.x, y: block.y },
+              });
+            }
           }
         }
       }
@@ -523,6 +558,8 @@ export function selectCPUActions(G: GameState, cpuTeam: Team): (CardAction | Gua
         cardId: action.card.id,
         targetPos: action.targetPos,
         targetChampionId: action.targetChampionId,
+        attackTargetPos: action.attackTargetPos,
+        attackDirection: action.attackDirection,
         // targetTowerId は削除
         isAlternativeMove: action.isAlternativeMove,
       });
@@ -559,7 +596,7 @@ export function selectCPUTarget(
   card: Card,
   team: Team,
   isAlternativeMove: boolean = false
-): { targetPos?: Position; targetChampionId?: string } {
+): { targetPos?: Position; targetChampionId?: string; attackTargetPos?: Position; attackDirection?: Position } {
   // 候補を生成して最良のものを選択
   const candidates = generateActionCandidates(G, champion, team)
     .filter(c => c.card.id === card.id && !c.isGuard && c.isAlternativeMove === isAlternativeMove);
@@ -575,6 +612,8 @@ export function selectCPUTarget(
   return {
     targetPos: best.targetPos,
     targetChampionId: best.targetChampionId,
+    attackTargetPos: best.attackTargetPos,
+    attackDirection: best.attackDirection,
   };
 }
 

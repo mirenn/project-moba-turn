@@ -504,7 +504,8 @@ const commonMoves = {
       targetPos?: Position,
       targetChampionId?: string,
       skipAttack?: boolean,
-      attackDirection?: Position
+      attackDirection?: Position,
+      attackTargetPos?: Position
     ) => {
       if (G.gamePhase !== 'resolution') return;
       if (!G.currentResolvingAction) return;
@@ -529,6 +530,7 @@ const commonMoves = {
       if (targetPos) cardAction.targetPos = targetPos;
       if (targetChampionId) cardAction.targetChampionId = targetChampionId;
       if (attackDirection) cardAction.attackDirection = attackDirection;
+      if (attackTargetPos) cardAction.attackTargetPos = attackTargetPos;
 
       // 代替アクション以外でカード情報を取得
       const card = !cardAction.isAlternativeMove 
@@ -558,7 +560,7 @@ const commonMoves = {
         // 条件: 攻撃力がある AND 攻撃スキップされていない
         if (card.power > 0 && !skipAttack) {
           // すでにターゲット指定済みならOK
-          if (cardAction.targetChampionId) {
+          if (cardAction.targetChampionId || cardAction.attackTargetPos) {
             // OK
           } else {
             // ターゲット未指定の場合、
@@ -575,8 +577,10 @@ const commonMoves = {
               const hasEnemyChampion = G.players[enemyTeam].champions.some(c => 
                 c.pos !== null && getDistance(effectivePos, c.pos) <= attackRange
               );
+              // ブロックチェック
+              const hasBlock = G.blocks.some(b => getDistance(effectivePos, {x: b.x, y: b.y}) <= attackRange);
               
-              if (hasEnemyChampion) {
+              if (hasEnemyChampion || hasBlock) {
                 // 対象がいるのに選択されていない -> 待機
                 readyToResolve = false;
               } else {
@@ -1288,7 +1292,8 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
           
-          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
+          G.players[team].gold += 1; // ダメージ毎に1G
+          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ 💰+1G`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
@@ -1372,7 +1377,8 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
           
-          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
+          G.players[team].gold += 1; // ダメージ毎に1G
+          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ 💰+1G`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
@@ -1446,7 +1452,8 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
           
-          let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
+          G.players[team].gold += 1; // ダメージ毎に1G
+          let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ 💰+1G`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
@@ -1488,6 +1495,21 @@ function resolveCardAction(
           // 撃破処理は checkKnockouts で
         } else {
           G.turnLog.push(`${championName} の ${card.nameJa}！ しかし ${getChampionDisplayName(target)} に届かなかった...`);
+        }
+      } else if (action.attackTargetPos) {
+        // ブロックなどの位置自体をターゲットした場合
+        const block = G.blocks.find(b => b.x === action.attackTargetPos!.x && b.y === action.attackTargetPos!.y);
+        if (block) {
+          targetPos = action.attackTargetPos;
+          const dist = getDistance(champion.pos, targetPos);
+          if (dist <= attackRange) {
+            block.hp -= 1; // ブロックは固定1ダメージとする
+            G.turnLog.push(`${championName} の ${card.nameJa}！ ブロックにヒット！ (残りHP: ${block.hp})`);
+            if (block.hp <= 0) {
+              G.blocks = G.blocks.filter(b => b !== block);
+              G.turnLog.push(`ブロックが破壊された！`);
+            }
+          }
         }
       }
     }
