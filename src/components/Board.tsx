@@ -584,7 +584,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
 
           {/* 方向指定攻撃の場合: 4方向ボタン */}
-          {resolvingCard && resolvingCard.isDirectional && (
+          {resolvingCard && resolvingCard.isDirectional && !isAlternativeMove && (
             <div className="flex flex-col items-center gap-1 mb-3">
               <button
                 className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
