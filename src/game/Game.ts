@@ -33,18 +33,7 @@ const ADMIN_DOMAIN_POINTS = 5; // 中央マスのポイント
 const KILL_POINTS = 5; // 撃破ポイント
 const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
 
-// ゴールド関連定数
-const GOLD_PER_KILL = 5;   // 敵チャンピオン撃破で得るゴールド
-const GOLD_PER_PHASE = 3;  // フェイズ終了時の基本ゴールド
-const GOLD_LOSER_BONUS = 1; // 負けているチームへの追加ゴールド
 
-// アップグレードコスト・効果
-const UPGRADE_COST_T1 = 3;   // Tier1アップグレードのコスト
-const UPGRADE_COST_T2 = 6;   // Tier2アップグレードのコスト
-const UPGRADE_POWER_T1 = 20; // Tier1パワーボーナス
-const UPGRADE_POWER_T2 = 40; // Tier2パワーボーナス
-const UPGRADE_MOVE_T1 = 1;   // Tier1移動ボーナス
-const UPGRADE_MOVE_T2 = 2;   // Tier2移動ボーナス
 
 // Admin Domain: 中央3x3 (5,5) ~ (7,7)
 function isAdminDomain(x: number, y: number): boolean {
@@ -365,7 +354,6 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
     team,
     selectedChampionIds: championIds,
     champions,
-    gold: 0,
     resources: { wood: 0, stone: 0 },
   };
 }
@@ -837,117 +825,7 @@ const commonMoves = {
       events.endTurn({ next: G.deployTurn });
     },
 
-    // アップグレードフェーズ: カードを強化
-    upgradeCard: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string,
-      cardId: string,
-      upgradeType: 'power' | 'move'
-    ) => {
-      if (G.gamePhase !== 'upgrade') return;
-      const team = playerID as Team;
-      const player = G.players[team];
 
-      const champion = player.champions.find(c => c.id === championId);
-      if (!champion) return;
-      const card = champion.cards.find(c => c.id === cardId);
-      if (!card) return;
-
-      const currentBonus = upgradeType === 'power' ? (card.bonusPower ?? 0) : (card.bonusMove ?? 0);
-      const maxBonus = upgradeType === 'power' ? UPGRADE_POWER_T2 : UPGRADE_MOVE_T2;
-      if (currentBonus >= maxBonus) return; // 既に最大強化済み
-
-      const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
-      if (player.gold < cost) return; // ゴールド不足
-
-      player.gold -= cost;
-      if (upgradeType === 'power') {
-        const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
-        card.bonusPower = (card.bonusPower ?? 0) + add;
-        const tier = card.bonusPower >= UPGRADE_POWER_T2 ? 'T2' : 'T1';
-        G.turnLog.push(`💪 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 威力+${card.bonusPower} [${tier}] (-${cost}G)`);
-      } else {
-        const add = currentBonus === 0 ? UPGRADE_MOVE_T1 : UPGRADE_MOVE_T2 - UPGRADE_MOVE_T1;
-        card.bonusMove = (card.bonusMove ?? 0) + add;
-        const tier = card.bonusMove >= UPGRADE_MOVE_T2 ? 'T2' : 'T1';
-        G.turnLog.push(`👟 ${getChampionDisplayName(champion)} の ${card.nameJa} を強化！ 移動+${card.bonusMove} [${tier}] (-${cost}G)`);
-      }
-    },
-
-    // アップグレードフェーズ: 覚醒
-    awakenChampion: (
-      { G, playerID }: { G: GameState; playerID: string },
-      championId: string
-    ) => {
-      if (G.gamePhase !== 'upgrade') return;
-      const team = playerID as Team;
-      const player = G.players[team];
-
-      const champion = player.champions.find(c => c.id === championId);
-      if (!champion) return;
-      if (champion.isAwakened) return;
-
-      const COST = 10;
-      if (player.gold < COST) return;
-
-      player.gold -= COST;
-      champion.isAwakened = true;
-      
-      const def = getChampionById(champion.definitionId);
-      if (def?.ultimateCard) {
-        champion.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
-      }
-      
-      G.turnLog.push(`🌟 ${getChampionDisplayName(champion)} が覚醒した！アルティメット技が解禁！ (-${COST}G)`);
-    },
-
-    // アップグレードフェーズ: 確定して次のフェーズへ
-    confirmUpgrade: ({ G }: { G: GameState }) => {
-      if (G.gamePhase !== 'upgrade') return;
-
-      // CPU（チーム1）の自動アップグレード（高威力カードを優先）
-      const cpuPlayer = G.players['1'];
-      const cpuChampions = cpuPlayer.champions;
-      for (const champ of cpuChampions) {
-        // 先に覚醒できるなら覚醒する
-        if (!champ.isAwakened && cpuPlayer.gold >= 10) {
-          cpuPlayer.gold -= 10;
-          champ.isAwakened = true;
-          const def = getChampionById(champ.definitionId);
-          if (def?.ultimateCard) {
-            champ.cards.push({ ...def.ultimateCard, currentCooldown: 0 });
-          }
-          G.turnLog.push(`[CPU] 🌟 ${getChampionDisplayName(champ)} が覚醒した！`);
-        }
-
-        const cards = champ.cards
-          .filter(c => c.power > 0)
-          .sort((a, b) => b.power - a.power);
-        for (const c of cards) {
-          if (cpuPlayer.gold < UPGRADE_COST_T1) break;
-          const currentBonus = c.bonusPower ?? 0;
-          if (currentBonus >= UPGRADE_POWER_T2) continue;
-          const cost = currentBonus === 0 ? UPGRADE_COST_T1 : UPGRADE_COST_T2 - UPGRADE_COST_T1;
-          if (cpuPlayer.gold >= cost) {
-            cpuPlayer.gold -= cost;
-            const add = currentBonus === 0 ? UPGRADE_POWER_T1 : UPGRADE_POWER_T2 - UPGRADE_POWER_T1;
-            c.bonusPower = currentBonus + add;
-            G.turnLog.push(`[CPU] ${getChampionDisplayName(champ)} の ${c.nameJa} を強化！ 威力+${c.bonusPower}`);
-          }
-        }
-      }
-
-      // 両チーム確定 → 次フェーズへ
-      G.upgradeConfirmed = { '0': false, '1': false };
-      if (needsDeployPhase(G)) {
-        G.gamePhase = 'deploy';
-        G.deployTurn = '0';
-        G.turnLog.push('--- 配置フェーズ開始 ---');
-      } else {
-        G.gamePhase = 'planning';
-        G.turnLog.push('--- 計画フェーズ開始 ---');
-      }
-    },
 };
 
 export const LoLBoardGame = {
@@ -1034,7 +912,6 @@ export const LoLBoardGame = {
       cpuActionDelay: 0,
       homeSquares: { '0': [], '1': [] },
       blocks: INITIAL_BLOCKS.map(b => ({ ...b, hp: b.maxHp })),
-      upgradeConfirmed: { '0': false, '1': false },
       resourceNodes,           // ★ 生成した資源ノードを初期化
       resourceRollResult: null // ★
     };
@@ -1407,8 +1284,7 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
           
-          G.players[team].gold += 1; // ダメージ毎に1G
-          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ 💰+1G`;
+          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
@@ -1418,8 +1294,7 @@ function resolveCardAction(
             enemy.knockoutTurnsRemaining = KNOCKOUT_TURNS;
             enemy.currentHp = 0;
             G.scores[team] += KILL_POINTS;
-            G.players[team].gold += GOLD_PER_KILL;
-            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+            G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt`);
           }
         }
         
@@ -1492,8 +1367,7 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
           
-          G.players[team].gold += 1; // ダメージ毎に1G
-          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ 💰+1G`;
+          let logMsg = `${getChampionDisplayName(enemy)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
@@ -1504,11 +1378,10 @@ function resolveCardAction(
             enemy.currentHp = 0;
             const bounty = enemy.isAwakened ? 5 : 0;
             G.scores[team] += KILL_POINTS + bounty;
-            G.players[team].gold += GOLD_PER_KILL;
             if (bounty > 0) {
-              G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(enemy)} を討ち取った！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+              G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(enemy)} を討ち取った！ +${KILL_POINTS + bounty}pt`);
             } else {
-              G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+              G.turnLog.push(`${getChampionDisplayName(enemy)} は撃破された！ +${KILL_POINTS}pt`);
             }
           }
         }
@@ -1567,8 +1440,7 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
           
-          G.players[team].gold += 1; // ダメージ毎に1G
-          let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ 💰+1G`;
+          let logMsg = `${championName} の ${card.nameJa}！ ${getChampionDisplayName(target)} に ${finalDamage} ダメージ`;
           if (effectiveness) logMsg += ` ${effectiveness}`;
           G.turnLog.push(logMsg);
           
@@ -1579,11 +1451,10 @@ function resolveCardAction(
              target.currentHp = 0;
              const bounty = target.isAwakened ? 5 : 0;
              G.scores[team] += KILL_POINTS + bounty;
-             G.players[team].gold += GOLD_PER_KILL;
              if (bounty > 0) {
-               G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(target)} を討ち取った！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+               G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(target)} を讨ち取った！ +${KILL_POINTS + bounty}pt`);
              } else {
-               G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+               G.turnLog.push(`${getChampionDisplayName(target)} は撃破された！ +${KILL_POINTS}pt`);
              }
           }
 
@@ -1884,15 +1755,6 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.currentPhase++;
     isNewPhase = true;
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
-    
-    // フェイズ終了時のゴールド付与
-    const lowerScoreTeam = G.scores['0'] <= G.scores['1'] ? '0' : '1';
-    for (const team of ['0', '1'] as Team[]) {
-      const bonus = team === lowerScoreTeam ? GOLD_LOSER_BONUS : 0;
-      const earned = GOLD_PER_PHASE + bonus;
-      G.players[team].gold += earned;
-      G.turnLog.push(`💰 ${team === '0' ? '青' : '赤'}チーム: +${earned}G (所持: ${G.players[team].gold}G)`);
-    }
   }
   
   // 状態リセット
@@ -1910,20 +1772,13 @@ function finishResolutionPhase(G: GameState, random: any) {
   
   G.turnLog.push('--- ターン終了 ---');
   
-  // フェーズ開始時はアップグレードフェーズを挟む
-  if (isNewPhase) {
-    G.gamePhase = 'upgrade';
-    G.upgradeConfirmed = { '0': false, '1': false };
-    G.turnLog.push('--- アップグレードフェーズ開始 ---');
+  // 配置が必要なら配置フェーズ、そうでなければ計画フェーズ
+  if (needsDeployPhase(G)) {
+    G.gamePhase = 'deploy';
+    G.deployTurn = '0';
+    G.turnLog.push('--- 配置フェーズ開始 ---');
   } else {
-    // 通常ターン: 配置が必要なら配置フェーズ、そうでなければ計画フェーズ
-    if (needsDeployPhase(G)) {
-      G.gamePhase = 'deploy';
-      G.deployTurn = '0';
-      G.turnLog.push('--- 配置フェーズ開始 ---');
-    } else {
-      G.gamePhase = 'planning';
-    }
+    G.gamePhase = 'planning';
   }
 }
 
@@ -1943,12 +1798,11 @@ function checkKnockouts(G: GameState) {
         const enemyTeam = team === '0' ? '1' : '0';
         const bounty = champion.isAwakened ? 5 : 0;
         G.scores[enemyTeam] += KILL_POINTS + bounty;
-        G.players[enemyTeam].gold += GOLD_PER_KILL;
         
         if (bounty > 0) {
-          G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS + bounty}pt 💰+${GOLD_PER_KILL}G`);
+          G.turnLog.push(`🎯 SHUTDOWN! ${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS + bounty}pt`);
         } else {
-          G.turnLog.push(`${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS}pt 💰+${GOLD_PER_KILL}G`);
+          G.turnLog.push(`${getChampionDisplayName(champion)} は反動で倒れた！ +${KILL_POINTS}pt`);
         }
       }
     }

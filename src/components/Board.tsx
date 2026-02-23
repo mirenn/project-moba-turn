@@ -60,7 +60,6 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const actingChampionIds = G.turnActions[myPlayerID].actions.map(a => a.championId);
   const isDeployPhase = G.gamePhase === 'deploy';
   const isMyDeployTurn = isDeployPhase && G.deployTurn === myPlayerID;
-  const isUpgradePhase = G.gamePhase === 'upgrade';
 
   // 解決フェーズ用の状態
   const isResolutionPhase = G.gamePhase === 'resolution';
@@ -398,12 +397,10 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           フェイズ {G.currentPhase} / ターン {G.turnInPhase}
         </div>
         <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'planning' ? 'bg-blue-600' :
-          G.gamePhase === 'resolution' ? 'bg-orange-600' :
-            G.gamePhase === 'upgrade' ? 'bg-purple-600' : 'bg-green-600'
+          G.gamePhase === 'resolution' ? 'bg-orange-600' : 'bg-green-600'
           }`}>
           {G.gamePhase === 'planning' ? '計画フェーズ' :
-            G.gamePhase === 'resolution' ? '解決フェーズ' :
-              G.gamePhase === 'upgrade' ? '⬆ アップグレード' : '配置フェーズ'}
+            G.gamePhase === 'resolution' ? '解決フェーズ' : '配置フェーズ'}
         </div>
         {isDeployPhase && (
           <div className="text-yellow-400 font-bold ml-2">
@@ -411,7 +408,6 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
         )}
         <div className="ml-auto flex gap-3 font-bold items-center">
-          <span className="text-yellow-400 text-sm">💰 {myPlayerState.gold}G</span>
           <div className="flex gap-2 bg-slate-800 px-2 py-1 rounded border border-slate-700">
             <span className="text-green-400 text-xs flex items-center gap-1" title="木材">🌲 {myPlayerState.resources.wood}</span>
             <span className="text-stone-400 text-xs flex items-center gap-1" title="石材">⛰️ {myPlayerState.resources.stone}</span>
@@ -430,114 +426,6 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         </div>
       )}
 
-      {/* アップグレードフェーズUI */}
-      {isUpgradePhase && (
-        <div className="w-full max-w-3xl bg-purple-950/80 border border-purple-500 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-purple-300 font-bold text-lg flex items-center gap-2">
-              ⬆ アップグレードフェーズ
-            </h2>
-            <div className="flex items-center gap-3">
-              <span className="text-yellow-400 font-bold text-sm">💰 所持: {G.players[myPlayerID].gold}G</span>
-              <button
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-sm transition-all"
-                onClick={() => moves.confirmUpgrade()}
-              >
-                ✅ 確定して次へ
-              </button>
-            </div>
-          </div>
-          <div className="text-slate-400 text-xs mb-3">
-            ゴールドを使ってカードを強化できます。Tier1(3G) → Tier2(+3G)の2段階。
-          </div>
-          <div className="grid grid-cols-1 gap-3">
-            {myPlayerState.champions.map(champion => {
-              const def = getChampionDef(champion);
-              const allCards = champion.cards;
-              return (
-                <div key={champion.id} className="bg-slate-800 rounded-lg p-3">
-                  <div className="text-white font-bold text-sm mb-2">
-                    {def?.nameJa || champion.definitionId}
-                    <span className="text-slate-400 text-xs ml-2">HP: {champion.currentHp}/{champion.maxHp}</span>
-                    {champion.knockoutTurnsRemaining > 0 && (
-                      <span className="text-red-400 text-xs ml-2">（復活待ち {champion.knockoutTurnsRemaining}T）</span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {allCards.map(card => {
-                      const powerBonus = card.bonusPower ?? 0;
-                      const moveBonus = card.bonusMove ?? 0;
-                      const powerTier = powerBonus >= 40 ? 'T2' : powerBonus > 0 ? 'T1' : null;
-                      const moveTier = moveBonus >= 2 ? 'T2' : moveBonus > 0 ? 'T1' : null;
-                      const canUpgradePower = powerBonus < 40 && G.players[myPlayerID].gold >= (powerBonus === 0 ? 3 : 3);
-                      const canUpgradeMove = moveBonus < 2 && G.players[myPlayerID].gold >= (moveBonus === 0 ? 3 : 3);
-                      return (
-                        <div key={card.id} className="bg-slate-700 rounded p-2 min-w-[140px] flex-1">
-                          <div className="text-white text-xs font-bold mb-1 flex items-center gap-1">
-                            {card.nameJa}
-                            {powerTier && <span className="text-orange-400 text-[10px] bg-orange-900/50 px-1 rounded">{powerTier}</span>}
-                            {moveTier && <span className="text-green-400 text-[10px] bg-green-900/50 px-1 rounded">{moveTier}</span>}
-                          </div>
-                          <div className="text-slate-400 text-[10px] mb-2">
-                            {card.power > 0 && <span>威力: {card.power}{powerBonus > 0 ? `+${powerBonus}` : ''}</span>}
-                            {card.power > 0 && card.move > 0 && ' / '}
-                            {card.move > 0 && <span>移動: {card.move}{moveBonus > 0 ? `+${moveBonus}` : ''}</span>}
-                          </div>
-                          <div className="flex gap-1">
-                            {card.power > 0 && (
-                              <button
-                                className={`px-2 py-1 text-[10px] rounded font-bold transition-all ${!canUpgradePower || powerBonus >= 40
-                                  ? 'bg-slate-600 text-slate-500 cursor-not-allowed'
-                                  : 'bg-orange-700 hover:bg-orange-600 text-white cursor-pointer'
-                                  }`}
-                                disabled={!canUpgradePower || powerBonus >= 40}
-                                onClick={() => moves.upgradeCard(champion.id, card.id, 'power')}
-                              >
-                                💪 威力{powerBonus >= 40 ? 'MAX' : `(${powerBonus === 0 ? 3 : 3}G)`}
-                              </button>
-                            )}
-                            {card.move > 0 && (
-                              <button
-                                className={`px-2 py-1 text-[10px] rounded font-bold transition-all ${!canUpgradeMove || moveBonus >= 2
-                                  ? 'bg-slate-600 text-slate-500 cursor-not-allowed'
-                                  : 'bg-green-700 hover:bg-green-600 text-white cursor-pointer'
-                                  }`}
-                                disabled={!canUpgradeMove || moveBonus >= 2}
-                                onClick={() => moves.upgradeCard(champion.id, card.id, 'move')}
-                              >
-                                👟 移動{moveBonus >= 2 ? 'MAX' : `(${moveBonus === 0 ? 3 : 3}G)`}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {def?.ultimateCard && !champion.isAwakened && (
-                    <div className="mt-2 text-right">
-                      <button
-                        className={`px-3 py-1 text-xs rounded font-bold transition-all shadow-lg ${G.players[myPlayerID].gold >= 10
-                          ? 'bg-yellow-600 hover:bg-yellow-500 text-white animate-pulse'
-                          : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                          }`}
-                        disabled={G.players[myPlayerID].gold < 10}
-                        onClick={() => moves.awakenChampion(champion.id)}
-                      >
-                        🌟 覚醒 (10G) - {def.ultimateCard.nameJa} 解禁
-                      </button>
-                    </div>
-                  )}
-                  {champion.isAwakened && (
-                    <div className="mt-2 text-right text-xs text-yellow-400 font-bold bg-yellow-900/30 inline-block px-2 py-1 rounded ml-auto flex justify-end">
-                      👑 覚醒済み（賞金首）
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 解決フェーズ: ターゲット選択UI */}
       {isResolutionPhase && isAwaitingTarget && resolvingChampion && (resolvingCard || isAlternativeMove) && (

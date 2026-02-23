@@ -134,7 +134,6 @@ export interface PlayerState {
   team: Team;
   selectedChampionIds: string[]; // 選択した4体のチャンピオンdefinitionId
   champions: ChampionInstance[]; // ゲーム内のチャンピオンインスタンス
-  gold: number;                  // 現在の所持ゴールド
   resources: Record<ResourceType, number>; // 所持している資材（木材、石材）
 }
 
@@ -186,7 +185,7 @@ export interface GameState {
   turnInPhase: number;     // フェイズ内のターン数（1-4）
   turnActions: Record<Team, TurnAction>;
   turnLog: string[];
-  gamePhase: 'deploy' | 'planning' | 'resolution' | 'upgrade'; // ゲームフェーズ
+  gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ（upgradeは廃止）
   winner: Team | null;
   
   // 陣取り用
@@ -219,9 +218,6 @@ export interface GameState {
   
   // 障害物ブロック
   blocks: Block[];
-  
-  // アップグレードフェーズ用
-  upgradeConfirmed: Record<Team, boolean>; // 各チームがアップグレード確定済みか
 }
 
 // 旧型との互換性のため（移行期間中）
