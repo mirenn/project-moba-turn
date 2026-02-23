@@ -248,6 +248,66 @@ function getDistance(p1: Position, p2: Position): number {
   return Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
 }
 
+// ロンゲストペイントボーナス（10マス以上で最大面積のプレイヤーに+10pt）をチェック・更新
+export function checkLongestPaintBonus(G: GameState): void {
+  // 1. 各チームの塗られているマス数を計算
+  const paintCount: Record<Team, number> = { '0': 0, '1': 0 };
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const owner = G.territory[y][x];
+      if (owner !== null) {
+        paintCount[owner]++;
+      }
+    }
+  }
+
+  // 2. 現在の保持者と状況を確認
+  const currentHolder = G.longestPaintBonusHolder;
+  const team0Qualifies = paintCount['0'] >= 10;
+  const team1Qualifies = paintCount['1'] >= 10;
+
+  if (currentHolder === null) {
+    // 誰も持っていない場合、どちらかが10マス以上で、かつ相手より多ければ獲得
+    if (team0Qualifies && paintCount['0'] > paintCount['1']) {
+      G.longestPaintBonusHolder = '0';
+      G.scores['0'] += 10;
+      G.turnLog.push(`🌟 青チームが盤面を${paintCount['0']}マス塗り、ロンゲストペイントボーナス(+10pt)を獲得！`);
+    } else if (team1Qualifies && paintCount['1'] > paintCount['0']) {
+      G.longestPaintBonusHolder = '1';
+      G.scores['1'] += 10;
+      G.turnLog.push(`🌟 赤チームが盤面を${paintCount['1']}マス塗り、ロンゲストペイントボーナス(+10pt)を獲得！`);
+    }
+  } else {
+    // 既に誰かが持っている場合
+    const holderCount = paintCount[currentHolder];
+    const challenger = currentHolder === '0' ? '1' : '0';
+    const challengerCount = paintCount[challenger];
+
+    if (holderCount < 10) {
+      // 保持者が10マス未満になったので喪失
+      G.longestPaintBonusHolder = null;
+      G.scores[currentHolder] -= 10;
+      G.turnLog.push(`💔 ${currentHolder === '0' ? '青' : '赤'}チームの陣地が10マス未満になり、ロンゲストペイントボーナス(-10pt)を喪失した...`);
+      
+      // チャレンジャーが10マス以上あればそのまま獲得
+      if (challengerCount >= 10) {
+        G.longestPaintBonusHolder = challenger;
+        G.scores[challenger] += 10;
+        G.turnLog.push(`🌟 ${challenger === '0' ? '青' : '赤'}チームがロンゲストペイントボーナス(+10pt)を獲得！`);
+      }
+    } else {
+      // 保持者は10マス以上維持しているが、チャレンジャーがそれを上回った場合奪取
+      // 同数の場合は保持者のまま
+      if (challengerCount > holderCount) {
+        G.longestPaintBonusHolder = challenger;
+        G.scores[currentHolder] -= 10;
+        G.scores[challenger] += 10;
+        G.turnLog.push(`🌟 ${challenger === '0' ? '青' : '赤'}チームが盤面を${challengerCount}マス塗り、ロンゲストペイントボーナスを奪取！`);
+      }
+    }
+  }
+}
+
 function createChampionInstance(
   definitionId: string, 
   team: Team, 
@@ -889,6 +949,7 @@ export const LoLBoardGame = {
       players,
       territory,
       scores: { '0': 0, '1': 0 },
+      longestPaintBonusHolder: null, // ★ロンゲストペイントボーナスの初期化
       pointTokens: [],  // ポイントトークン初期化
       pendingPointTokens: initialPendingTokens,  // 初期予告トークン（中央に5pt×3）
       currentPhase: 1,
@@ -1735,6 +1796,9 @@ function finishResolutionPhase(G: GameState, random: any) {
   
   // ★ 新ルール: ポイント獲得 - 陣地上のトークンを回収
   collectPointsFromTerritory(G);
+  
+  // ★ 新ルール: ロンゲストペイントボーナスのチェック
+  checkLongestPaintBonus(G);
   
   // ★ 新ルール: 資源獲得 - サイコロを振って該当する資源ノードから資源を獲得
   processResourceNodes(G, random);

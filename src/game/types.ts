@@ -191,6 +191,7 @@ export interface GameState {
   // 陣取り用
   territory: TerritoryOwner[][]; // 13x13の陣地マップ
   scores: Record<Team, number>;   // 各チームのスコア（累積獲得ポイント）
+  longestPaintBonusHolder: Team | null; // ロンゲストペイントボーナスの保持者
   
   // ポイントトークン用
   pointTokens: PointToken[];      // ボード上のポイントトークン

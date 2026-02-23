@@ -412,8 +412,14 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             <span className="text-green-400 text-xs flex items-center gap-1" title="木材">🌲 {myPlayerState.resources.wood}</span>
             <span className="text-stone-400 text-xs flex items-center gap-1" title="石材">⛰️ {myPlayerState.resources.stone}</span>
           </div>
-          <span className="text-blue-400 ml-2">青: {G.scores['0']}pt</span>
-          <span className="text-red-400">赤: {G.scores['1']}pt</span>
+          <span className="text-blue-400 ml-2">
+            青: {G.scores['0']}pt
+            {G.longestPaintBonusHolder === '0' && <span className="text-xs ml-1" title="ロンゲストペイントボーナス">🌟</span>}
+          </span>
+          <span className="text-red-400">
+            赤: {G.scores['1']}pt
+            {G.longestPaintBonusHolder === '1' && <span className="text-xs ml-1" title="ロンゲストペイントボーナス">🌟</span>}
+          </span>
           <span className="text-slate-400 text-xs self-center">（50pt勝利）</span>
         </div>
       </div>
