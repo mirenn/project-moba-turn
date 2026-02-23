@@ -308,6 +308,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const handleCellClick = (x: number, y: number) => {
     // 解決フェーズ: ターゲット選択
     if (isResolutionPhase && isAwaitingTarget) {
+      // Antigravity AIモードかつ、現在解決中のチャンピオンがAI側（チーム1）の場合は
+      // プレイヤーのクリック操作を受け付けない
+      if (G.aiMode === 'antigravity' && resolvingChampion?.team === '1') {
+        return;
+      }
+
       const { champion } = getCellContent(x, y);
 
       // 移動先として選択
@@ -585,7 +591,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
 
           {/* 方向指定攻撃の場合: 4方向ボタン */}
-          {resolvingCard && resolvingCard.isDirectional && !isAlternativeMove && (
+          {resolvingCard && resolvingCard.isDirectional && !isAlternativeMove && !(G.aiMode === 'antigravity' && resolvingChampion.team === '1') && (
             <div className="flex flex-col items-center gap-1 mb-3">
               <button
                 className="w-12 h-10 bg-orange-600 hover:bg-orange-500 text-white text-lg font-bold rounded"
@@ -613,12 +619,14 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             </div>
           )}
 
-          <button
-            className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded"
-            onClick={handleSkipAction}
-          >
-            スキップ
-          </button>
+          {!(G.aiMode === 'antigravity' && resolvingChampion.team === '1') && (
+            <button
+              className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded"
+              onClick={handleSkipAction}
+            >
+              スキップ
+            </button>
+          )}
         </div>
       )}
 

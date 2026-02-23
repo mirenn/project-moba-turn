@@ -455,11 +455,15 @@ const commonMoves = {
     },
     
     // Antigravityからのアクションを受信
-    submitAntigravityAction: ({ G, random }: { G: GameState; random: any }, actions: TurnAction) => {
+    submitAntigravityAction: ({ G, random }: { G: GameState; random: any }, actionsPayload: TurnAction | any[]) => {
       if (G.aiMode !== 'antigravity' || G.gamePhase !== 'planning' || G.antigravityState !== 'waiting_for_move') return;
       
-      // 受信したアクションをセット
-      G.turnActions['1'] = actions;
+      // 受信したアクションをセット (配列が直接渡された場合と、{actions: [...]}のオブジェクトが渡された場合の両方に対応)
+      if (Array.isArray(actionsPayload)) {
+        G.turnActions['1'] = { actions: actionsPayload };
+      } else {
+        G.turnActions['1'] = actionsPayload;
+      }
       G.antigravityState = 'idle';
       
       // 全行動を優先度順にソートして解決フェーズへ
@@ -702,6 +706,12 @@ const commonMoves = {
       if (!G.awaitingTargetSelection) return;
       
       const { action, team } = G.currentResolvingAction;
+
+      // Antigravity AIのターゲット選択待ち状態では、ここで（UIからの）プレイヤー入力を受け付けない
+      if (G.aiMode === 'antigravity' && team === '1') {
+        return;
+      }
+
       const champion = G.players[team].champions.find(c => c.id === action.championId);
       if (!champion) return;
 
@@ -824,6 +834,12 @@ const commonMoves = {
       if (!G.currentResolvingAction) return;
       
       const { action, team } = G.currentResolvingAction;
+
+      // Antigravity AIの待機状態ではプレイヤーによるスキップ操作を受け付けない
+      if (G.aiMode === 'antigravity' && team === '1') {
+        return;
+      }
+
       const champion = G.players[team].champions.find(c => c.id === action.championId);
       
       if (champion && !('discardCardIds' in action)) {
@@ -1226,10 +1242,25 @@ function processNextAction(G: GameState, random: any) {
 
   // --- Antigravityモード時のターゲット選択待機 ---
   if (G.aiMode === 'antigravity' && team === '1') {
-    G.awaitingTargetSelection = true;
-    G.antigravityState = 'waiting_for_action_target';
-    G.turnLog.push(`[Antigravity] ${getChampionDisplayName(champion)} が ${card?.nameJa || 'カード'} を使用 - ターゲット選択待ち...`);
-    return;
+    // 既にターゲット情報が含まれているか確認
+    let needsTarget = true;
+    if (action.isAlternativeMove && action.targetPos) needsTarget = false;
+    else if (card) {
+      if (card.isSwap && action.targetChampionId) needsTarget = false;
+      else if (card.isDirectional && action.attackDirection) needsTarget = false;
+      else if (card.move > 0 && action.targetPos && card.power === 0) needsTarget = false;
+      else if (card.power > 0 && (action.targetChampionId || action.attackTargetPos || action.targetPos)) {
+        // 攻撃技で、何らかのターゲットが指定済みなら待機不要とする
+        needsTarget = false;
+      }
+    }
+
+    if (needsTarget) {
+      G.awaitingTargetSelection = true;
+      G.antigravityState = 'waiting_for_action_target';
+      G.turnLog.push(`[Antigravity] ${getChampionDisplayName(champion)} が ${card?.nameJa || 'カード'} を使用 - ターゲット選択待ち...`);
+      return;
+    }
   }
   // ---------------------------------------------
   
@@ -2039,3 +2070,4 @@ function getTypeNameJa(type: string): string {
   };
   return typeNames[type] || type;
 }
+// trigger reload
