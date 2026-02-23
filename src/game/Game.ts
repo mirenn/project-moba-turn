@@ -1482,19 +1482,19 @@ function resolveCardAction(
         } else {
           G.turnLog.push(`${championName} の ${card.nameJa}！ しかし ${getChampionDisplayName(target)} に届かなかった...`);
         }
-      } else if (action.attackTargetPos) {
-        // ブロックなどの位置自体をターゲットした場合
-        const block = G.blocks.find(b => b.x === action.attackTargetPos!.x && b.y === action.attackTargetPos!.y);
-        if (block) {
-          targetPos = action.attackTargetPos;
-          const dist = getDistance(champion.pos, targetPos);
-          if (dist <= attackRange) {
-            block.hp -= 1; // ブロックは固定1ダメージとする
-            G.turnLog.push(`${championName} の ${card.nameJa}！ ブロックにヒット！ (残りHP: ${block.hp})`);
-            if (block.hp <= 0) {
-              G.blocks = G.blocks.filter(b => b !== block);
-              G.turnLog.push(`ブロックが破壊された！`);
-            }
+      }
+    } else if (action.attackTargetPos) {
+      // ブロックなどの位置自体をターゲットした場合
+      const block = G.blocks.find(b => b.x === action.attackTargetPos!.x && b.y === action.attackTargetPos!.y);
+      if (block) {
+        targetPos = action.attackTargetPos;
+        const dist = getDistance(champion.pos, targetPos);
+        if (dist <= attackRange) {
+          block.hp -= 1; // ブロックは固定1ダメージとする
+          G.turnLog.push(`${championName} の ${card.nameJa}！ ブロックにヒット！ (残りHP: ${block.hp})`);
+          if (block.hp <= 0) {
+            G.blocks = G.blocks.filter(b => b !== block);
+            G.turnLog.push(`ブロックが破壊された！`);
           }
         }
       }
