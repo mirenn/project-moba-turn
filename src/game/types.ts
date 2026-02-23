@@ -188,7 +188,7 @@ export interface GameState {
   gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ（upgradeは廃止）
   winner: Team | null;
   aiMode: 'cpu' | 'antigravity'; // AIの動作モード
-  antigravityState: 'idle' | 'waiting_for_move'; // Antigravityの外部入力待ち状態
+  antigravityState: 'idle' | 'waiting_for_move' | 'waiting_for_action_target'; // Antigravityの外部入力待ち状態
 
   
   // 陣取り用

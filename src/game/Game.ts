@@ -495,6 +495,29 @@ const commonMoves = {
       processNextAction(G, random);
     },
 
+    // 解決フェーズ: Antigravityからのターゲット情報を受信する
+    submitAntigravityTarget: ({ G, random }: { G: GameState; random: any }, targetData: any) => {
+      // 解決フェーズかつAntigravityのターゲット待ち状態でのみ有効
+      if (G.gamePhase !== 'resolution' || G.antigravityState !== 'waiting_for_action_target' || !G.currentResolvingAction) return;
+
+      const { action, team } = G.currentResolvingAction;
+      const cardAction = action as CardAction;
+
+      // targetDataをアクションのプロパティに適用
+      if (targetData.targetPos) cardAction.targetPos = targetData.targetPos;
+      if (targetData.targetChampionId) cardAction.targetChampionId = targetData.targetChampionId;
+      if (targetData.attackDirection) cardAction.attackDirection = targetData.attackDirection;
+      if (targetData.attackTargetPos) cardAction.attackTargetPos = targetData.attackTargetPos;
+
+      G.antigravityState = 'idle';
+      
+      // ターゲット情報が設定された前提で解決を実行
+      resolveCardAction(G, cardAction, team, random);
+      G.awaitingTargetSelection = false;
+      G.currentResolvingAction = null;
+      processNextAction(G, random);
+    },
+
     // 計画フェーズ: カードを選択
     selectCard: (
       { G, playerID }: { G: GameState; playerID: string },
@@ -1198,9 +1221,20 @@ function processNextAction(G: GameState, random: any) {
     return;
   }
   
-  // CPUの行動: ディレイ表示のためにここで一旦停止
-  // ターゲットを事前に決定してアクションに設定
+  // CPUの行動
   const card = champion.cards.find(c => c.id === action.cardId);
+
+  // --- Antigravityモード時のターゲット選択待機 ---
+  if (G.aiMode === 'antigravity' && team === '1') {
+    G.awaitingTargetSelection = true;
+    G.antigravityState = 'waiting_for_action_target';
+    G.turnLog.push(`[Antigravity] ${getChampionDisplayName(champion)} が ${card?.nameJa || 'カード'} を使用 - ターゲット選択待ち...`);
+    return;
+  }
+  // ---------------------------------------------
+  
+  // ディレイ表示のためにここで一旦停止
+  // ターゲットを事前に決定してアクションに設定
   if (card) {
     const { targetPos, targetChampionId } = selectCPUTarget(
       G, 

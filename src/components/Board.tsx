@@ -152,7 +152,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     let timeoutId: NodeJS.Timeout;
 
     // Antigravityの行動待ち状態に入ったとき
-    if (G.aiMode === 'antigravity' && G.antigravityState === 'waiting_for_move') {
+    if (G.aiMode === 'antigravity' && (G.antigravityState === 'waiting_for_move' || G.antigravityState === 'waiting_for_action_target')) {
       const exportState = async () => {
         try {
           const res = await fetch('/api/antigravity/state', {
@@ -161,7 +161,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             body: JSON.stringify(G)
           });
           if (res.ok) {
-            console.log('[DEBUG] GameState exported for Antigravity');
+            console.log(`[DEBUG] GameState exported for Antigravity (${G.antigravityState})`);
           }
         } catch (e) {
           console.error('Failed to export state:', e);
@@ -173,12 +173,16 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           const res = await fetch('/api/antigravity/move');
           const data = await res.json();
           if (data.status === 'success' && data.data) {
-            console.log('[DEBUG] Antigravity move received:', data.data);
-            movesRef.current.submitAntigravityAction(data.data);
+            console.log(`[DEBUG] Antigravity response received (${G.antigravityState}):`, data.data);
+            if (G.antigravityState === 'waiting_for_move') {
+              movesRef.current.submitAntigravityAction(data.data);
+            } else if (G.antigravityState === 'waiting_for_action_target') {
+              movesRef.current.submitAntigravityTarget(data.data);
+            }
             return; // ポーリング終了
           }
         } catch (e) {
-          console.error('Failed to check move:', e);
+          console.error('Failed to check move/target:', e);
         }
 
         // まだ行動がない場合は1秒後に再チェック
@@ -493,12 +497,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       )}
 
       {/* Antigravity 待機モード UI */}
-      {G.aiMode === 'antigravity' && G.antigravityState === 'waiting_for_move' && (
+      {G.aiMode === 'antigravity' && (G.antigravityState === 'waiting_for_move' || G.antigravityState === 'waiting_for_action_target') && (
         <div className="bg-purple-900/50 border-2 border-purple-500 rounded-lg p-6 max-w-md text-center shadow-[0_0_20px_rgba(147,51,234,0.3)] my-4 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-purple-400/20 to-purple-500/10 animate-pulse"></div>
           <div className="relative z-10 flex flex-col items-center gap-3">
             <h2 className="text-xl font-bold text-purple-300 flex items-center gap-2">
-              <span className="animate-spin text-purple-400">⚛️</span> Antigravity 思考中...
+              <span className="animate-spin text-purple-400">⚛️</span> {G.antigravityState === 'waiting_for_action_target' ? 'Antigravity ターゲット選択中...' : 'Antigravity 思考中...'}
             </h2>
             <p className="text-sm text-purple-200/80">
               Antigravity AI モデルが次の手を計算しています。ファイルシステム経由でターンデータを同期します。
