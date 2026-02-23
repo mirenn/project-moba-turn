@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # lol-board-game
 
 MOBAとターン制戦略ボードゲームを融合したゲーム。
