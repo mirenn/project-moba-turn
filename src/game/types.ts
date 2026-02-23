@@ -37,7 +37,7 @@ export interface ResourceNode {
   x: number;
   y: number;
   type: ResourceType; // 産出する資源の種類
-  triggerNumber: number; // 資源を産出するフラグとなる数字 (1-6)
+  triggerNumber: number; // 資源を産出するフラグとなる数字 (1-3)
 }
 
 export interface Position {

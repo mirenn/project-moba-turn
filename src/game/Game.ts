@@ -252,8 +252,8 @@ function collectPointsFromTerritory(G: GameState): void {
 
 // ターン終了時にサイコロを振って資源を獲得する
 export function processResourceNodes(G: GameState, random: any): void {
-  // 1〜6のサイコロを振る
-  const roll = 1 + Math.floor(random.Number() * 6);
+  // 1〜3のサイコロを振る
+  const roll = 1 + Math.floor(random.Number() * 3);
   G.resourceRollResult = roll;
 
   if (!G.resourceNodes) return; // 古いセーブデータ対策
@@ -998,8 +998,8 @@ export const LoLBoardGame = {
       // 重複チェック
       if (resourceNodes.some(n => n.x === x && n.y === y)) continue;
       
-      // 1〜6のランダムな目を割り当て
-      const triggerNumber = 1 + Math.floor(random.Number() * 6);
+      // 1〜3のランダムな目を割り当て
+      const triggerNumber = 1 + Math.floor(random.Number() * 3);
       resourceNodes.push({ x, y, type: resourceTypes[placed], triggerNumber });
       placed++;
     }
