@@ -664,8 +664,9 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   </div>
                   {def?.nameJa || champion.definitionId}
                 </div>
-                <div className="text-xs text-slate-400">
-                  HP: {champion.currentHp}/{champion.maxHp}
+                <div className="text-xs text-slate-400 flex items-center gap-2">
+                  <span>HP: {champion.currentHp}/{champion.maxHp}</span>
+                  <span title="素早さ (行動順に影響)">速:{def?.speed}</span>
                 </div>
                 {isDeployPhase && isMyDeployTurn && champion.pos === null && (
                   <div className="text-xs text-yellow-400 font-bold mt-1">選択して配置</div>
@@ -978,7 +979,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                               <div className="flex items-center gap-1">
                                 <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5 ${onCooldown ? 'opacity-50' : ''}`}>
                                   {typeConfig.icon}
-                                  <span className="text-[10px] text-white">{card.priority}</span>
+                                  <span className="text-[10px] text-white">{card.priority > 0 ? `+${card.priority}` : card.priority}</span>
                                 </div>
                                 <span className={`text-xs font-bold ${onCooldown ? 'text-slate-500' : 'group-hover:text-yellow-200'}`}>{card.nameJa}</span>
                                 {onCooldown && (
@@ -1078,7 +1079,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                           <div className="flex items-center gap-1 mt-1">
                             <div className={`${typeConfig?.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
                               {typeConfig?.icon}
-                              <span className="text-[10px] text-white">{card.priority}</span>
+                              <span className="text-[10px] text-white">{card.priority > 0 ? `+${card.priority}` : card.priority}</span>
                             </div>
                             <span className="text-xs text-white">{card.nameJa}</span>
                           </div>
@@ -1116,7 +1117,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                           <div className="flex items-center gap-1 mt-1">
                             <div className={`${typeConfig?.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
                               {typeConfig?.icon}
-                              <span className="text-[10px] text-white">{card.priority}</span>
+                              <span className="text-[10px] text-white">{card.priority > 0 ? `+${card.priority}` : card.priority}</span>
                             </div>
                             <span className="text-xs text-white">{card.nameJa}</span>
                           </div>
@@ -1151,7 +1152,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         <div className="flex items-center gap-1">
                           <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5`}>
                             {typeConfig.icon}
-                            <span className="text-[10px] text-white">{card.priority}</span>
+                            <span className="text-[10px] text-white">{card.priority > 0 ? `+${card.priority}` : card.priority}</span>
                           </div>
                           <span className="text-xs text-red-200 font-bold">{card.nameJa}</span>
                         </div>

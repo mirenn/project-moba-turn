@@ -480,17 +480,26 @@ const commonMoves = {
             priority = card?.priority || 0;
           }
           
+          const def = getChampionById(champion.definitionId);
+          const speed = def ? def.speed : 0;
+          
           allActions.push({
             action,
             team,
             priority,
+            speed,
             championId: action.championId,
           });
         }
       }
       
-      // 優先度の高い順にソート
-      allActions.sort((a, b) => b.priority - a.priority);
+      // 優先度の高い順にソート（同数の場合は素早さが高い順）
+      allActions.sort((a, b) => {
+        if (b.priority !== a.priority) {
+          return b.priority - a.priority;
+        }
+        return b.speed - a.speed;
+      });
       
       G.pendingActions = allActions;
       G.gamePhase = 'resolution';
@@ -672,17 +681,26 @@ const commonMoves = {
             priority = card?.priority || 0;
           }
           
+          const def = getChampionById(champion.definitionId);
+          const speed = def ? def.speed : 0;
+          
           allActions.push({
             action,
             team,
             priority,
+            speed,
             championId: action.championId,
           });
         }
       }
       
-      // 優先度の高い順にソート
-      allActions.sort((a, b) => b.priority - a.priority);
+      // 優先度の高い順にソート（同数の場合は素早さが高い順）
+      allActions.sort((a, b) => {
+        if (b.priority !== a.priority) {
+          return b.priority - a.priority;
+        }
+        return b.speed - a.speed;
+      });
       
       G.pendingActions = allActions;
       G.gamePhase = 'resolution';

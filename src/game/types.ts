@@ -83,6 +83,7 @@ export interface ChampionDefinition {
   nameJa: string;
   type: ElementType;       // チャンピオンの属性
   hp: number;
+  speed: number;           // 素早さ（行動順の判定に使用）
   ability?: string;        // 特性名
   abilityDesc?: string;    // 特性の説明
   cards: Card[];           // 所持カード（4枚 + 交代カード）
@@ -142,6 +143,7 @@ export interface PendingAction {
   action: CardAction | GuardAction;
   team: Team;
   priority: number;
+  speed: number;
   championId: string;
 }
 
