@@ -123,6 +123,7 @@ const kidoubaCards: Card[] = [
     effectFn: 'linearMove',
     cooldown: 1,
     currentCooldown: 0,
+    resourceCost: { wood: 1 },
   },
   {
     id: 'kidouba-fumitsuke',
