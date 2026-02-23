@@ -40,23 +40,7 @@ function isAdminDomain(x: number, y: number): boolean {
   return x >= 5 && x <= 7 && y >= 5 && y <= 7;
 }
 
-// 初期ブロック配置定義
-const INITIAL_BLOCKS: Omit<Block, 'hp'>[] = [
-  // 脆いブロック (HP1) - 四隅付近
-  { x: 3, y: 1, maxHp: 1 },
-  { x: 9, y: 1, maxHp: 1 },
-  { x: 1, y: 3, maxHp: 1 },
-  { x: 11, y: 3, maxHp: 1 },
-  { x: 1, y: 9, maxHp: 1 },
-  { x: 11, y: 9, maxHp: 1 },
-  { x: 3, y: 11, maxHp: 1 },
-  { x: 9, y: 11, maxHp: 1 },
-  // 硬いブロック (HP2) - 中央エリア周辺
-  { x: 4, y: 3, maxHp: 2 },
-  { x: 8, y: 3, maxHp: 2 },
-  { x: 4, y: 9, maxHp: 2 },
-  { x: 8, y: 9, maxHp: 2 },
-];
+
 
 // 陣地を塗る
 export function paintTile(G: GameState, x: number, y: number, team: Team): void {
@@ -861,6 +845,25 @@ export const LoLBoardGame = {
       });
     }
 
+    // ランダムなブロックの生成 (hp1が6個、hp2が4個 = 計10個)
+    const blocks: Block[] = [];
+    const blockHps = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2];
+    let placedBlocks = 0;
+    
+    while (placedBlocks < blockHps.length) {
+      const x = Math.floor(random.Number() * BOARD_SIZE);
+      const y = Math.floor(random.Number() * BOARD_SIZE);
+      
+      // Admin Domainを避ける
+      if (isAdminDomain(x, y)) continue;
+      // 重複チェック
+      if (blocks.some(b => b.x === x && b.y === y)) continue;
+      
+      const maxHp = blockHps[placedBlocks];
+      blocks.push({ x, y, hp: maxHp, maxHp });
+      placedBlocks++;
+    }
+
     // 資源ノードの生成 (木材9、石材9 = 計18個)
     const resourceNodes: ResourceNode[] = [];
     const resourceTypes: ResourceType[] = ['wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone'];
@@ -870,9 +873,9 @@ export const LoLBoardGame = {
       const x = Math.floor(random.Number() * BOARD_SIZE);
       const y = Math.floor(random.Number() * BOARD_SIZE);
       
-      // Admin Domainと初期ブロックを避ける
+      // Admin Domainとブロックを避ける
       if (isAdminDomain(x, y)) continue;
-      if (INITIAL_BLOCKS.some(b => b.x === x && b.y === y)) continue;
+      if (blocks.some(b => b.x === x && b.y === y)) continue;
       // 重複チェック
       if (resourceNodes.some(n => n.x === x && n.y === y)) continue;
       
@@ -911,7 +914,7 @@ export const LoLBoardGame = {
       pointEvents: [],
       cpuActionDelay: 0,
       homeSquares: { '0': [], '1': [] },
-      blocks: INITIAL_BLOCKS.map(b => ({ ...b, hp: b.maxHp })),
+      blocks,
       resourceNodes,           // ★ 生成した資源ノードを初期化
       resourceRollResult: null // ★
     };
