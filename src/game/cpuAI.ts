@@ -637,8 +637,8 @@ export function selectCPUDeployPosition(
   // ポイントトークンと勝利ターゲットに近い位置を優先
   const victoryTargets = getVictoryTargets(team);
   const pointTokenPositions = [
-    ...G.pointTokens.map(t => ({ x: t.x, y: t.y })),
-    ...G.pendingPointTokens.map(t => ({ x: t.x, y: t.y }))
+    ...(G.pointTokens || []).map(t => ({ x: t.x, y: t.y })),
+    ...(G.pendingPointTokens || []).map(t => ({ x: t.x, y: t.y }))
   ];
   
   availablePositions.sort((a, b) => {

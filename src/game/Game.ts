@@ -14,7 +14,9 @@ import {
   ElementType,
   PointToken,
   PendingPointToken,
-  Block
+  Block,
+  ResourceType,
+  ResourceNode
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
@@ -232,11 +234,41 @@ function collectPointsFromTerritory(G: GameState): void {
       G.scores[owner] += token.value;
       collectedTokens.push(token);
       G.turnLog.push(`${owner === '0' ? '青' : '赤'}チームが ${token.value}pt 獲得！(${token.x}, ${token.y})`);
+      
+      G.pointEvents.push({
+        id: `point-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        x: token.x,
+        y: token.y,
+        amount: token.value,
+        team: owner,
+        timestamp: Date.now()
+      });
     }
   }
   
   // 獲得したトークンを削除
   G.pointTokens = G.pointTokens.filter(t => !collectedTokens.includes(t));
+}
+
+// ターン終了時にサイコロを振って資源を獲得する
+export function processResourceNodes(G: GameState, random: any): void {
+  // 1〜6のサイコロを振る
+  const roll = 1 + Math.floor(random.Number() * 6);
+  G.resourceRollResult = roll;
+
+  if (!G.resourceNodes) return; // 古いセーブデータ対策
+
+  // 出目と一致する資源マスを塗っているプレイヤーに資源を付与
+  for (const node of G.resourceNodes) {
+    if (node.triggerNumber === roll) {
+      const owner = G.territory[node.y][node.x];
+      if (owner !== null) {
+        G.players[owner].resources[node.type] += 1;
+        const resourceNameStr = node.type === 'wood' ? '木材' : node.type === 'stone' ? '石' : '鉄';
+        G.turnLog.push(`${owner === '0' ? '青' : '赤'}チームが ${resourceNameStr} を獲得！(${node.x}, ${node.y})`);
+      }
+    }
+  }
 }
 
 function getDistance(p1: Position, p2: Position): number {
@@ -252,6 +284,11 @@ function createChampionInstance(
   const definition = getChampionById(definitionId);
   if (!definition) return null;
   
+  // ゲーム中は3つのスキル + 1つの交代カードにする
+  const nonSwapCards = definition.cards.filter(c => !c.isSwap).slice(0, 3);
+  const swapCard = definition.cards.find(c => c.isSwap);
+  const selectedCards = swapCard ? [...nonSwapCards, swapCard] : nonSwapCards;
+
   return {
     id: `${team}-${definitionId}-${instanceIndex}`,
     definitionId,
@@ -260,10 +297,11 @@ function createChampionInstance(
     maxHp: definition.hp,
     currentType: definition.type,
     pos: initialPos,
-    cards: definition.cards.map(c => ({ ...c, currentCooldown: 0 })),
+    cards: selectedCards.map(c => ({ ...c, currentCooldown: 0 })),
     isGuarding: false,
     knockoutTurnsRemaining: 0,
     isAwakened: false,
+    usedSkillIds: [],
   };
 }
 
@@ -328,6 +366,7 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
     selectedChampionIds: championIds,
     champions,
     gold: 0,
+    resources: { wood: 0, stone: 0 },
   };
 }
 
@@ -397,6 +436,45 @@ const commonMoves = {
       
       const alreadyActing = currentActions.some(a => a.championId === championId);
       if (alreadyActing) return;
+
+      // 資源コストチェック
+      if (!isAlternativeMove && card.resourceCost) {
+        // 古いセーブデータ対策
+        const usedSkills = champion.usedSkillIds || [];
+        const isFirstTime = !usedSkills.includes(card.id);
+        if (!isFirstTime) {
+          // 既に計画されているアクションのコストを計算
+          const plannedCosts = { wood: 0, stone: 0, iron: 0 };
+          for (const a of currentActions) {
+            if ('discardCardIds' in a) continue; // ガードはコストなし
+            if (a.isAlternativeMove) continue;
+            
+            const plannedChampion = playerState.champions.find(c => c.id === a.championId);
+            if (!plannedChampion) continue;
+            
+            const plannedCard = plannedChampion.cards.find(c => c.id === a.cardId);
+            if (!plannedCard || !plannedCard.resourceCost) continue;
+            
+            const plannedUsedSkills = plannedChampion.usedSkillIds || [];
+            const plannedFirstTime = !plannedUsedSkills.includes(plannedCard.id);
+            if (!plannedFirstTime) {
+              plannedCosts.wood += plannedCard.resourceCost.wood || 0;
+              plannedCosts.stone += plannedCard.resourceCost.stone || 0;
+            }
+          }
+          
+          const neededWood = (card.resourceCost.wood || 0) + plannedCosts.wood;
+          const neededStone = (card.resourceCost.stone || 0) + plannedCosts.stone;
+          
+          if (
+            playerState.resources.wood < neededWood ||
+            playerState.resources.stone < neededStone
+          ) {
+            G.turnLog.push(`❌ ${card.nameJa} を使用するための資源が足りません！`);
+            return; // 資源不足
+          }
+        }
+      }
       
       const action: CardAction = {
         championId,
@@ -905,6 +983,27 @@ export const LoLBoardGame = {
       });
     }
 
+    // 資源ノードの生成 (木材9、石材9 = 計18個)
+    const resourceNodes: ResourceNode[] = [];
+    const resourceTypes: ResourceType[] = ['wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone'];
+    let placed = 0;
+    
+    while (placed < resourceTypes.length) {
+      const x = Math.floor(random.Number() * BOARD_SIZE);
+      const y = Math.floor(random.Number() * BOARD_SIZE);
+      
+      // Admin Domainと初期ブロックを避ける
+      if (isAdminDomain(x, y)) continue;
+      if (INITIAL_BLOCKS.some(b => b.x === x && b.y === y)) continue;
+      // 重複チェック
+      if (resourceNodes.some(n => n.x === x && n.y === y)) continue;
+      
+      // 1〜6のランダムな目を割り当て
+      const triggerNumber = 1 + Math.floor(random.Number() * 6);
+      resourceNodes.push({ x, y, type: resourceTypes[placed], triggerNumber });
+      placed++;
+    }
+
     return {
       players,
       territory,
@@ -931,10 +1030,13 @@ export const LoLBoardGame = {
       currentResolvingAction: null,
       awaitingTargetSelection: false,
       damageEvents: [],
+      pointEvents: [],
       cpuActionDelay: 0,
       homeSquares: { '0': [], '1': [] },
       blocks: INITIAL_BLOCKS.map(b => ({ ...b, hp: b.maxHp })),
       upgradeConfirmed: { '0': false, '1': false },
+      resourceNodes,           // ★ 生成した資源ノードを初期化
+      resourceRollResult: null // ★
     };
   },
 
@@ -1178,6 +1280,19 @@ function resolveCardAction(
     // カードにCDをセット
     card.currentCooldown = card.cooldown;
     return;
+  }
+  
+  // 資源コストの支払いと初回使用チェック
+  if (card.resourceCost) {
+    if (!champion.usedSkillIds) champion.usedSkillIds = [];
+    const isFirstTime = !champion.usedSkillIds.includes(card.id);
+    if (!isFirstTime) {
+      if (card.resourceCost.wood) G.players[team].resources.wood -= card.resourceCost.wood;
+      if (card.resourceCost.stone) G.players[team].resources.stone -= card.resourceCost.stone;
+    } else {
+      G.turnLog.push(`✨ ${championName} は初めて ${card.nameJa} を使うため、資源コスト0で発動！`);
+      champion.usedSkillIds.push(card.id);
+    }
   }
   
   // へんげんじざい特性
@@ -1746,6 +1861,9 @@ function finishResolutionPhase(G: GameState, random: any) {
   
   // ★ 新ルール: ポイント獲得 - 陣地上のトークンを回収
   collectPointsFromTerritory(G);
+  
+  // ★ 新ルール: 資源獲得 - サイコロを振って該当する資源ノードから資源を獲得
+  processResourceNodes(G, random);
   
   // ★ 旧ルール削除: 囲い塗りは廃止
   // detectAndFillEnclosures(G, '0');

@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
-import { GameState, Team, ChampionInstance, Card, Position, DamageEvent, Block } from '../game/types';
+import { GameState, Team, ChampionInstance, Card, Position, DamageEvent, Block, PointEvent } from '../game/types';
 import { getChampionById } from '../game/champions';
 import { getSpawnPositions, isValidDeployPosition, findReachablePositionsWithPath } from '../game/Game';
 import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
@@ -41,8 +41,10 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedChampionId, setSelectedChampionId] = useState<string | null>(null);
   const [selectedEnemyChampionId, setSelectedEnemyChampionId] = useState<string | null>(null);
   const [visibleDamageEvents, setVisibleDamageEvents] = useState<VisibleDamageEvent[]>([]);
+  const [visiblePointEvents, setVisiblePointEvents] = useState<PointEvent[]>([]);
   const [hoveredMovePos, setHoveredMovePos] = useState<Position | null>(null); // 経路プレビュー用
   const processedEventIdsRef = useRef<Set<string>>(new Set());
+  const processedPointEventIdsRef = useRef<Set<string>>(new Set());
 
   const myPlayerID = (playerID || '0') as Team;
   const myPlayerState = G.players[myPlayerID];
@@ -121,6 +123,30 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       }, 1000);
     }
   }, [G.damageEvents, G.players]);
+
+  // ポイントイベントの処理（アニメーション用）
+  useEffect(() => {
+    if (!G.pointEvents || G.pointEvents.length === 0) return;
+
+    // 新しいポイントイベントを処理
+    const newEvents: PointEvent[] = [];
+
+    for (const event of G.pointEvents) {
+      if (processedPointEventIdsRef.current.has(event.id)) continue;
+      processedPointEventIdsRef.current.add(event.id);
+      newEvents.push(event);
+    }
+
+    if (newEvents.length > 0) {
+      setVisiblePointEvents(prev => [...prev, ...newEvents]);
+
+      // 1.5秒後にイベントを削除
+      const eventIds = newEvents.map(e => e.id);
+      setTimeout(() => {
+        setVisiblePointEvents(prev => prev.filter(e => !eventIds.includes(e.id)));
+      }, 1500);
+    }
+  }, [G.pointEvents]);
 
   // movesをrefで保持（useEffect内でstaleにならないように）
   const movesRef = useRef(moves);
@@ -384,13 +410,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
             {isMyDeployTurn ? 'あなたの配置番です' : '相手の配置番です'}
           </div>
         )}
-        <div className="ml-auto flex gap-4 font-bold">
-          <span className="text-yellow-400 text-sm">💰 {G.players[myPlayerID].gold}G</span>
-          <span className="text-blue-400">青: {G.scores['0']}pt</span>
+        <div className="ml-auto flex gap-3 font-bold items-center">
+          <span className="text-yellow-400 text-sm">💰 {myPlayerState.gold}G</span>
+          <div className="flex gap-2 bg-slate-800 px-2 py-1 rounded border border-slate-700">
+            <span className="text-green-400 text-xs flex items-center gap-1" title="木材">🌲 {myPlayerState.resources.wood}</span>
+            <span className="text-stone-400 text-xs flex items-center gap-1" title="石材">⛰️ {myPlayerState.resources.stone}</span>
+          </div>
+          <span className="text-blue-400 ml-2">青: {G.scores['0']}pt</span>
           <span className="text-red-400">赤: {G.scores['1']}pt</span>
-          <span className="text-slate-400 text-xs self-center">（50ptで勝利）</span>
+          <span className="text-slate-400 text-xs self-center">（50pt勝利）</span>
         </div>
       </div>
+
+      {/* サイコロの出目表示 */}
+      {G.resourceRollResult !== null && (
+        <div className="text-sm font-bold bg-slate-800 border-2 border-slate-600 px-4 py-1 rounded-full text-yellow-300 flex items-center gap-2 shadow-lg mb-1 animate-pulse">
+          <span>🎲 資源ダイス結果:</span>
+          <span className="text-lg bg-slate-900 px-2 rounded">{G.resourceRollResult}</span>
+        </div>
+      )}
 
       {/* アップグレードフェーズUI */}
       {isUpgradePhase && (
@@ -783,6 +821,25 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
                   <span className="absolute bottom-0 right-0.5 text-[8px] text-slate-500">{x},{y}</span>
 
+                  {/* 資源ノード表示 */}
+                  {G.resourceNodes
+                    ?.filter(n => n.x === x && n.y === y)
+                    .map((node, idx) => (
+                      <div
+                        key={`resource-${idx}`}
+                        className={`absolute inset-0.5 rounded-full flex flex-col items-center justify-center z-10 opacity-70 pointer-events-none border-2
+                          ${node.type === 'wood' ? 'bg-green-900 border-green-500 text-green-300'
+                            : 'bg-stone-800 border-stone-500 text-stone-300'}`}
+                        title={`${node.type} 産出 (出目: ${node.triggerNumber})`}
+                      >
+                        <span className="text-[10px]">
+                          {node.type === 'wood' ? '🌲' : '⛰️'}
+                        </span>
+                        <span className="text-[12px] font-bold leading-none">{node.triggerNumber}</span>
+                      </div>
+                    ))
+                  }
+
                   {/* ブロック障害物表示 */}
                   {G.blocks
                     ?.filter(b => b.x === x && b.y === y)
@@ -856,6 +913,20 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         )}
                       </div>
                     ))}
+
+                  {/* ポイントポップアップ */}
+                  {visiblePointEvents
+                    .filter(e => e.x === x && e.y === y)
+                    .map(event => (
+                      <div
+                        key={event.id}
+                        className="point-popup absolute inset-0 flex flex-col items-center justify-center z-50 pointer-events-none"
+                      >
+                        <span className={`text-lg font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-50 ${event.team === '0' ? 'text-blue-400' : 'text-red-400'}`}>
+                          +{event.amount}
+                        </span>
+                      </div>
+                    ))}
                 </div>
               );
             })
@@ -910,6 +981,20 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                                 {card.move > 0 && <span>移動:{card.move}</span>}
                                 {card.power > 0 && <span className="text-orange-300">範囲:{card.attackRange ?? (card.move > 0 ? 1 : 2)}</span>}
                               </div>
+                              {/* 資源コスト表示 */}
+                              {card.resourceCost && (
+                                <div className="flex gap-1 text-[10px] mt-1 p-1 bg-slate-900/50 rounded flex-wrap">
+                                  <span className="text-slate-300 font-bold">コスト: </span>
+                                  {!selectedChampion?.usedSkillIds.includes(card.id) ? (
+                                    <span className="text-yellow-400 font-bold animate-pulse">初回無料！</span>
+                                  ) : (
+                                    <>
+                                      {card.resourceCost.wood ? <span className="text-green-400">🌲{card.resourceCost.wood}</span> : null}
+                                      {card.resourceCost.stone ? <span className="text-stone-400">⛰️{card.resourceCost.stone}</span> : null}
+                                    </>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {/* 代替アクション（移動）ボタン */}

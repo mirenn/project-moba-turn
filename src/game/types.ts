@@ -23,6 +23,23 @@ export type ElementType =
   | 'steel'    // はがね
   | 'fairy';   // フェアリー
 
+// 資源のタイプ (カタン風)
+export type ResourceType = 'wood' | 'stone';
+
+// 資源コスト
+export interface ResourceCost {
+  wood?: number;
+  stone?: number;
+}
+
+// 資源ノード（盤面に配置される資源産出マス）
+export interface ResourceNode {
+  x: number;
+  y: number;
+  type: ResourceType; // 産出する資源の種類
+  triggerNumber: number; // 資源を産出するフラグとなる数字 (1-6)
+}
+
 export interface Position {
   x: number;
   y: number;
@@ -56,6 +73,7 @@ export interface Card {
   bonusMove?: number;      // アップグレードによる移動距離ボーナス（累積）
   cooldown: number;        // 基本クールダウン（使用後に設定されるターン数）
   currentCooldown: number; // 残りクールダウン（0なら使用可能）
+  resourceCost?: ResourceCost; // 資源コスト（設定されている場合は、資源を消費する。ただし初回の使用はコスト0となる）
 }
 
 // チャンピオン定義（テンプレート）
@@ -84,6 +102,7 @@ export interface ChampionInstance {
   isGuarding: boolean;     // ガード状態かどうか
   knockoutTurnsRemaining: number; // 撃破後の復活待ちターン数（0なら行動可能）
   isAwakened: boolean;     // 覚醒状態かどうか（賞金首）
+  usedSkillIds: string[];  // これまでに使用したスキルのID（初回コスト0判定用）
 }
 
 
@@ -116,6 +135,7 @@ export interface PlayerState {
   selectedChampionIds: string[]; // 選択した4体のチャンピオンdefinitionId
   champions: ChampionInstance[]; // ゲーム内のチャンピオンインスタンス
   gold: number;                  // 現在の所持ゴールド
+  resources: Record<ResourceType, number>; // 所持している資材（木材、石材）
 }
 
 // 解決待ちの行動
@@ -150,6 +170,16 @@ export interface PendingPointToken {
   value: number;        // 1 = 通常, 5 = 高価値（赤ポイント）
 }
 
+// ポイント獲得イベント（アニメーション用）
+export interface PointEvent {
+  id: string;
+  x: number;
+  y: number;
+  amount: number;
+  team: Team;
+  timestamp: number;
+}
+
 export interface GameState {
   players: Record<Team, PlayerState>;
   currentPhase: number;    // 現在のフェイズ（4ターンで1フェイズ）
@@ -172,11 +202,16 @@ export interface GameState {
   currentResolvingAction: PendingAction | null; // 現在解決中の行動
   awaitingTargetSelection: boolean; // プレイヤーのターゲット選択待ちかどうか
   
+  // 資源システム用
+  resourceNodes: ResourceNode[]; // 盤面に配置された資源ノード
+  resourceRollResult: number | null; // ターン終了時のサイコロ(1-6)の出目。UI表示用
+  
   // 配置フェーズ用
   deployTurn?: Team; // 現在配置をおこなうチーム
   
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー
+  pointEvents: PointEvent[];    // ポイント獲得イベントのキュー
   cpuActionDelay: number;       // CPUアクション実行中のディレイトークン（0=無効、>0=ディレイ中）
   
   // ホームマス（最初のチャンピオン配置マス、永続的に保護される）
