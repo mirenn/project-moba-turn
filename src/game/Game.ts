@@ -407,6 +407,13 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
  * 勝利マスに近い位置を優先して配置
  */
 function autoCPUDeploy(G: GameState): void {
+  // Antigravityモードの場合は自動配置しない（外部入力を待つ）
+  if (G.aiMode === 'antigravity') {
+    G.turnLog.push('Antigravityによる配置を待機しています...');
+    // deployTurnは変えず、外部からのアクションで配置されるのを待つ
+    return;
+  }
+  
   const cpuTeam: Team = '1';
   const cpuPlayer = G.players[cpuTeam];
   
@@ -445,6 +452,54 @@ const ELEMENT_TYPES: ElementType[] = [
 ];
 
 const commonMoves = {
+    // AIモードの切り替え
+    toggleAIMode: ({ G }: { G: GameState }) => {
+      if (G.gamePhase !== 'deploy' && G.gamePhase !== 'planning') return;
+      G.aiMode = G.aiMode === 'cpu' ? 'antigravity' : 'cpu';
+      G.turnLog.push(`AIモードを ${G.aiMode === 'cpu' ? 'CPU' : 'Antigravity'} に変更しました`);
+    },
+    
+    // Antigravityからのアクションを受信
+    submitAntigravityAction: ({ G, random }: { G: GameState; random: any }, actions: TurnAction) => {
+      if (G.aiMode !== 'antigravity' || G.gamePhase !== 'planning' || G.antigravityState !== 'waiting_for_move') return;
+      
+      // 受信したアクションをセット
+      G.turnActions['1'] = actions;
+      G.antigravityState = 'idle';
+      
+      // 全行動を優先度順にソートして解決フェーズへ
+      const allActions: PendingAction[] = [];
+      
+      for (const team of ['0', '1'] as Team[]) {
+        for (const action of G.turnActions[team].actions) {
+          const champion = G.players[team].champions.find(c => c.id === action.championId);
+          if (!champion) continue;
+          
+          let priority = 0;
+          if (!('discardCardIds' in action)) {
+            const card = champion.cards.find(c => c.id === action.cardId);
+            priority = card?.priority || 0;
+          }
+          
+          allActions.push({
+            action,
+            team,
+            priority,
+            championId: action.championId,
+          });
+        }
+      }
+      
+      // 優先度の高い順にソート
+      allActions.sort((a, b) => b.priority - a.priority);
+      
+      G.pendingActions = allActions;
+      G.gamePhase = 'resolution';
+      G.turnLog.push('--- 解決フェーズ開始 (Antigravity行動受付完了) ---');
+      
+      processNextAction(G, random);
+    },
+
     // 計画フェーズ: カードを選択
     selectCard: (
       { G, playerID }: { G: GameState; playerID: string },
@@ -569,6 +624,13 @@ const commonMoves = {
       const requiredActions = Math.min(2, activeChampionsCount);
       
       if (G.turnActions['0'].actions.length < requiredActions) return;
+      
+      if (G.aiMode === 'antigravity') {
+        // Antigravityモードの場合は外部からの入力を待つ
+        G.antigravityState = 'waiting_for_move';
+        G.turnLog.push('Antigravityの行動を待機しています...');
+        return;
+      }
       
       // CPUの行動を自動選択（新AI）
       const cpuActions = selectCPUActions(G, '1');
@@ -787,6 +849,7 @@ const commonMoves = {
         resolveGuardAction(G, action, team);
       } else {
         // カードアクションの場合（ターゲットは既に設定済み）
+        // Antigravityモードでは、ターゲットは外部から既に指定されている前提
         resolveCardAction(G, action, team, random);
       }
       
@@ -977,7 +1040,9 @@ export const LoLBoardGame = {
       homeSquares: { '0': [], '1': [] },
       blocks,
       resourceNodes,           // ★ 生成した資源ノードを初期化
-      resourceRollResult: null // ★
+      resourceRollResult: null, // ★
+      aiMode: 'cpu',
+      antigravityState: 'idle'
     };
   },
 
@@ -995,6 +1060,7 @@ export const LoLBoardGame = {
       },
       moves: {
         deployChampion: commonMoves.deployChampion,
+        toggleAIMode: commonMoves.toggleAIMode,
       },
       endIf: ({ G }: { G: GameState }) => {
         // 両チームが3体ずつ配置したら終了

@@ -147,6 +147,56 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     }
   }, [G.pointEvents]);
 
+  // Antigravityモードの処理（状態のエクスポートと手番のロード）
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    // Antigravityの行動待ち状態に入ったとき
+    if (G.aiMode === 'antigravity' && G.antigravityState === 'waiting_for_move') {
+      const exportState = async () => {
+        try {
+          const res = await fetch('/api/antigravity/state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(G)
+          });
+          if (res.ok) {
+            console.log('[DEBUG] GameState exported for Antigravity');
+          }
+        } catch (e) {
+          console.error('Failed to export state:', e);
+        }
+      };
+
+      const checkMove = async () => {
+        try {
+          const res = await fetch('/api/antigravity/move');
+          const data = await res.json();
+          if (data.status === 'success' && data.data) {
+            console.log('[DEBUG] Antigravity move received:', data.data);
+            movesRef.current.submitAntigravityAction(data.data);
+            return; // ポーリング終了
+          }
+        } catch (e) {
+          console.error('Failed to check move:', e);
+        }
+
+        // まだ行動がない場合は1秒後に再チェック
+        timeoutId = setTimeout(checkMove, 1000);
+      };
+
+      // 1. 状態をエクスポート
+      exportState().then(() => {
+        // 2. 0.5秒後から行動のポーリングを開始
+        timeoutId = setTimeout(checkMove, 500);
+      });
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [G.aiMode, G.antigravityState, G]);
+
   // movesをrefで保持（useEffect内でstaleにならないように）
   const movesRef = useRef(moves);
   useEffect(() => {
@@ -389,26 +439,36 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       <h1 className="text-sm font-bold">MOBAボードゲーム</h1>
 
       {/* ステータスバー */}
-      <div className="flex gap-4 items-center text-sm">
-        <div className={`font-bold ${myPlayerID === '0' ? 'text-blue-400' : 'text-red-400'}`}>
-          {myPlayerID === '0' ? '青チーム' : '赤チーム'}
-        </div>
-        <div className="text-slate-400">
-          フェイズ {G.currentPhase} / ターン {G.turnInPhase}
-        </div>
-        <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'planning' ? 'bg-blue-600' :
-          G.gamePhase === 'resolution' ? 'bg-orange-600' : 'bg-green-600'
-          }`}>
-          {G.gamePhase === 'planning' ? '計画フェーズ' :
-            G.gamePhase === 'resolution' ? '解決フェーズ' : '配置フェーズ'}
-        </div>
-        {isDeployPhase && (
-          <div className="text-yellow-400 font-bold ml-2">
-            {isMyDeployTurn ? 'あなたの配置番です' : '相手の配置番です'}
+      <div className="flex gap-4 items-center justify-between w-full max-w-4xl px-4 py-2 bg-slate-800 rounded-lg shadow-md mb-2">
+        <div className="flex gap-4 items-center text-sm">
+          <div className={`font-bold ${myPlayerID === '0' ? 'text-blue-400' : 'text-red-400'}`}>
+            {myPlayerID === '0' ? '青チーム' : '赤チーム'}
           </div>
-        )}
-        <div className="ml-auto flex gap-3 font-bold items-center">
-          <div className="flex gap-2 bg-slate-800 px-2 py-1 rounded border border-slate-700">
+          <div className="text-slate-400">
+            フェイズ {G.currentPhase} / ターン {G.turnInPhase}
+          </div>
+          <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'planning' ? 'bg-blue-600' :
+            G.gamePhase === 'resolution' ? 'bg-orange-600' : 'bg-green-600'
+            }`}>
+            {G.gamePhase === 'planning' ? '計画フェーズ' :
+              G.gamePhase === 'resolution' ? '解決フェーズ' : '配置フェーズ'}
+          </div>
+          {isDeployPhase && (
+            <div className="text-yellow-400 font-bold ml-2">
+              {isMyDeployTurn ? 'あなたの配置番です' : '相手の配置番です'}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 font-bold items-center">
+          <button
+            className={`px-3 py-1 rounded text-xs font-bold flex items-center gap-2 transition-colors ${G.aiMode === 'antigravity' ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)]' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+            onClick={() => moves.toggleAIMode()}
+            title="AIモード設定の切り替え"
+          >
+            {G.aiMode === 'antigravity' ? '🌌 Antigravity Mode' : '🤖 CPU Mode'}
+          </button>
+
+          <div className="flex gap-2 bg-slate-900 px-2 py-1 rounded border border-slate-700 ml-2">
             <span className="text-green-400 text-xs flex items-center gap-1" title="木材">🌲 {myPlayerState.resources.wood}</span>
             <span className="text-stone-400 text-xs flex items-center gap-1" title="石材">⛰️ {myPlayerState.resources.stone}</span>
           </div>
@@ -432,6 +492,49 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
         </div>
       )}
 
+      {/* Antigravity 待機モード UI */}
+      {G.aiMode === 'antigravity' && G.antigravityState === 'waiting_for_move' && (
+        <div className="bg-purple-900/50 border-2 border-purple-500 rounded-lg p-6 max-w-md text-center shadow-[0_0_20px_rgba(147,51,234,0.3)] my-4 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-purple-400/20 to-purple-500/10 animate-pulse"></div>
+          <div className="relative z-10 flex flex-col items-center gap-3">
+            <h2 className="text-xl font-bold text-purple-300 flex items-center gap-2">
+              <span className="animate-spin text-purple-400">⚛️</span> Antigravity 思考中...
+            </h2>
+            <p className="text-sm text-purple-200/80">
+              Antigravity AI モデルが次の手を計算しています。ファイルシステム経由でターンデータを同期します。
+            </p>
+            <div className="flex gap-4 mt-2">
+              <div className="text-xs text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700 font-mono">
+                antigravity_state.json
+              </div>
+              <span className="text-slate-500">→</span>
+              <div className="text-xs text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700 font-mono">
+                antigravity_move.json
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4 w-full">
+              <button
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold rounded flex items-center justify-center gap-2 transition-colors"
+                onClick={async () => {
+                  try {
+                    await fetch('/api/antigravity/state', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(G)
+                    });
+                    alert('State manually exported!');
+                  } catch (e) {
+                    alert('Failed to export state.');
+                  }
+                }}
+              >
+                状態を再エクスポート
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 解決フェーズ: ターゲット選択UI */}
       {isResolutionPhase && isAwaitingTarget && resolvingChampion && (resolvingCard || isAlternativeMove) && (

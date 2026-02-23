@@ -187,6 +187,9 @@ export interface GameState {
   turnLog: string[];
   gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ（upgradeは廃止）
   winner: Team | null;
+  aiMode: 'cpu' | 'antigravity'; // AIの動作モード
+  antigravityState: 'idle' | 'waiting_for_move'; // Antigravityの外部入力待ち状態
+
   
   // 陣取り用
   territory: TerritoryOwner[][]; // 13x13の陣地マップ
