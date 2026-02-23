@@ -407,13 +407,8 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
  * 勝利マスに近い位置を優先して配置
  */
 function autoCPUDeploy(G: GameState): void {
-  // Antigravityモードの場合は自動配置しない（外部入力を待つ）
-  if (G.aiMode === 'antigravity') {
-    G.turnLog.push('Antigravityによる配置を待機しています...');
-    // deployTurnは変えず、外部からのアクションで配置されるのを待つ
-    return;
-  }
-  
+  // 配置フェーズはAntigravityモードでも通常通りCPUが自動配置する
+  // （Antigravityが操作するのは計画フェーズのアクションのみ）
   const cpuTeam: Team = '1';
   const cpuPlayer = G.players[cpuTeam];
   
