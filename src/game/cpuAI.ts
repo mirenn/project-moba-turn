@@ -81,44 +81,6 @@ function isAdminDomain(x: number, y: number): boolean {
   return x >= 5 && x <= 7 && y >= 5 && y <= 7;
 }
 
-const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
-
-function getSpawnPositions(): Position[] {
-  // 全盤面配置可能（中央3x3のAdmin Domainを除く）
-  const positions: Position[] = [];
-  for (let x = 0; x < BOARD_SIZE; x++) {
-    for (let y = 0; y < BOARD_SIZE; y++) {
-      // 中央3x3 (Admin Domain) は配置不可
-      if (isAdminDomain(x, y)) continue;
-      positions.push({ x, y });
-    }
-  }
-  return positions;
-}
-
-/**
- * 配置位置の妥当性をチェック（距離制約含む）
- */
-function isValidDeployPosition(G: GameState, pos: Position): boolean {
-  // 1. 盤面内チェック
-  if (pos.x < 0 || pos.x >= BOARD_SIZE || pos.y < 0 || pos.y >= BOARD_SIZE) return false;
-  
-  // 2. 中央3x3 (Admin Domain) は配置不可
-  if (isAdminDomain(pos.x, pos.y)) return false;
-  
-  // 3. 他のチャンピオンとの距離チェック
-  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-  for (const c of allChampions) {
-    if (c.pos === null) continue;
-    
-    const distance = getDistance(pos, c.pos);
-    if (distance < DEPLOY_MIN_DISTANCE) {
-      return false; // 距離が近すぎる
-    }
-  }
-  
-  return true;
-}
 
 function isPositionOccupied(G: GameState, pos: Position, excludeId?: string): boolean {
   const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
@@ -615,51 +577,4 @@ export function selectCPUTarget(
     attackTargetPos: best.attackTargetPos,
     attackDirection: best.attackDirection,
   };
-}
-
-/**
- * CPUの配置位置を選択（配置フェーズ）
- */
-export function selectCPUDeployPosition(
-  G: GameState,
-  champion: ChampionInstance,
-  team: Team
-): Position | null {
-  const spawnPositions = getSpawnPositions();
-  
-  // 距離制約を満たす位置のみ抽出
-  const availablePositions = spawnPositions.filter(pos => 
-    isValidDeployPosition(G, pos)
-  );
-  
-  if (availablePositions.length === 0) return null;
-  
-  // ポイントトークンと勝利ターゲットに近い位置を優先
-  const victoryTargets = getVictoryTargets(team);
-  const pointTokenPositions = [
-    ...(G.pointTokens || []).map(t => ({ x: t.x, y: t.y })),
-    ...(G.pendingPointTokens || []).map(t => ({ x: t.x, y: t.y }))
-  ];
-  
-  availablePositions.sort((a, b) => {
-    // ポイントトークンへの距離を優先
-    let scoreA = 0, scoreB = 0;
-    
-    if (pointTokenPositions.length > 0) {
-      const tokenDistA = Math.min(...pointTokenPositions.map(v => getDistance(a, v)));
-      const tokenDistB = Math.min(...pointTokenPositions.map(v => getDistance(b, v)));
-      scoreA += tokenDistA * 2;
-      scoreB += tokenDistB * 2;
-    }
-    
-    // 勝利ターゲットへの距離も考慮
-    const distA = Math.min(...victoryTargets.map(v => getDistance(a, v)));
-    const distB = Math.min(...victoryTargets.map(v => getDistance(b, v)));
-    scoreA += distA;
-    scoreB += distB;
-    
-    return scoreA - scoreB;
-  });
-  
-  return availablePositions[0];
 }

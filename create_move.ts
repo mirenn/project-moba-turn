@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { selectCPUActions, selectCPUTarget, selectCPUDeployPosition } from './src/game/cpuAI';
+import { selectCPUActions, selectCPUTarget } from './src/game/cpuAI';
 import { GameState } from './src/game/types';
 
 const statePath = 'antigravity_state.json';
@@ -11,10 +11,7 @@ try {
 
   let result: any = null;
 
-  if (state.gamePhase === 'deploy') {
-    // Not typically called for Antigravity, but just in case
-    console.log('Deploy phase, not handled explicitly here for antigravity');
-  } else if (state.antigravityState === 'waiting_for_move') {
+  if (state.antigravityState === 'waiting_for_move') {
     const actions = selectCPUActions(state, '1');
     result = { actions };
   } else if (state.antigravityState === 'waiting_for_action_target') {

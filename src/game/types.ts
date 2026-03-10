@@ -206,7 +206,7 @@ export interface GameState {
   turnInPhase: number;     // フェイズ内のターン数（1-4）
   turnActions: Record<Team, TurnAction>;
   turnLog: string[];
-  gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ（upgradeは廃止）
+  gamePhase: 'planning' | 'resolution'; // ゲームフェーズ（deploy, upgradeは廃止）
   winner: Team | null;
   aiMode: 'cpu' | 'antigravity'; // AIの動作モード
   antigravityState: 'idle' | 'waiting_for_move' | 'waiting_for_action_target'; // Antigravityの外部入力待ち状態
@@ -230,8 +230,8 @@ export interface GameState {
   resourceNodes: ResourceNode[]; // 盤面に配置された資源ノード
   resourceRollResult: number | null; // ターン終了時のサイコロ(1-6)の出目。UI表示用
   
-  // 配置フェーズ用
-  deployTurn?: Team; // 現在配置をおこなうチーム
+  // リスポーンシステム用（配置フェーズは廃止）
+  // deployTurn は廃止
   
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー

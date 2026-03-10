@@ -1,4 +1,4 @@
-import { ActivePlayers, TurnOrder } from 'boardgame.io/core';
+import { ActivePlayers } from 'boardgame.io/core';
 import { 
   GameState, 
   Position, 
@@ -20,7 +20,7 @@ import {
 } from './types';
 import { ALL_CHAMPIONS, getChampionById } from './champions';
 import { calculateDamage } from './typeChart';
-import { selectCPUActions, selectCPUTarget, selectCPUDeployPosition } from './cpuAI';
+import { selectCPUActions, selectCPUTarget } from './cpuAI';
 
 const BOARD_SIZE = 13;
 const TURNS_PER_PHASE = 4;
@@ -31,7 +31,12 @@ const CHAMPIONS_ON_FIELD = 3;
 const VICTORY_SCORE = 50;
 const ADMIN_DOMAIN_POINTS = 5; // 中央マスのポイント
 const KILL_POINTS = 5; // 撃破ポイント
-const DEPLOY_MIN_DISTANCE = 3; // 配置時の最低距離制約
+
+// 各チームのベース（リスポーン）位置
+const BASE_POSITIONS: Record<Team, Position[]> = {
+  '0': [{ x: 5, y: 12 }, { x: 6, y: 12 }, { x: 7, y: 12 }], // 青チーム: 下端中央
+  '1': [{ x: 5, y: 0 }, { x: 6, y: 0 }, { x: 7, y: 0 }],   // 赤チーム: 上端中央
+};
 
 
 
@@ -365,45 +370,25 @@ export function getSpawnPositions(): Position[] {
 }
 
 /**
- * 配置位置の妥当性をチェック（距離制約含む）
+ * 配置位置の妥当性をチェック
  * @param G ゲーム状態
  * @param pos 配置位置
- * @param excludeId 除外するチャンピオンID（自分自身）
  * @returns 配置可能ならtrue
  */
-export function isValidDeployPosition(G: GameState, pos: Position, excludeId?: string): boolean {
+export function isValidDeployPosition(G: GameState, pos: Position): boolean {
   // 1. 盤面内チェック
   if (pos.x < 0 || pos.x >= BOARD_SIZE || pos.y < 0 || pos.y >= BOARD_SIZE) return false;
   
   // 2. 中央3x3 (Admin Domain) は配置不可
   if (isAdminDomain(pos.x, pos.y)) return false;
   
-  // 3. 他のチャンピオンとの距離チェック
-  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
-  for (const c of allChampions) {
-    if (c.id === excludeId) continue;
-    if (c.pos === null) continue;
-    
-    const distance = getDistance(pos, c.pos);
-    if (distance < DEPLOY_MIN_DISTANCE) {
-      return false; // 距離が近すぎる
-    }
-  }
-  
   return true;
 }
 
-function getInitialPositions(team: Team): Position[] {
-  const spawns = getSpawnPositions();
-  return spawns.slice(0, CHAMPIONS_ON_FIELD);
-}
-
 function initializePlayerState(team: Team, championIds: string[]): PlayerState {
-  const initialPositions = getInitialPositions(team);
-  
   const champions: ChampionInstance[] = championIds.map((defId, idx) => {
-    // 初期配置はnull（展開フェーズで配置）
-    const pos = null;
+    // 最初の3体はベース位置に自動配置、4体目はベンチ
+    const pos = idx < CHAMPIONS_ON_FIELD ? BASE_POSITIONS[team][idx] : null;
     return createChampionInstance(defId, team, idx, pos);
   }).filter((c): c is ChampionInstance => c !== null);
   
@@ -415,44 +400,6 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
   };
 }
 
-/**
- * CPUの自動配置（新AI使用）
- * 勝利マスに近い位置を優先して配置
- */
-function autoCPUDeploy(G: GameState): void {
-  // 配置フェーズはAntigravityモードでも通常通りCPUが自動配置する
-  // （Antigravityが操作するのは計画フェーズのアクションのみ）
-  const cpuTeam: Team = '1';
-  const cpuPlayer = G.players[cpuTeam];
-  
-  // まだ配置されていないチャンピオン（ノックアウトされていない、HP > 0）
-  const undeployedChampion = cpuPlayer.champions.find(c => 
-    c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
-  );
-  
-  if (!undeployedChampion) return; // 配置可能なチャンピオンがいない
-  
-  // 既にフィールドに3体いる場合は配置しない
-  const deployedCount = cpuPlayer.champions.filter(c => c.pos !== null).length;
-  if (deployedCount >= 3) return;
-  
-  // 新AIを使って最適な配置位置を選択
-  const bestPos = selectCPUDeployPosition(G, undeployedChampion, cpuTeam);
-  
-  if (bestPos) {
-    undeployedChampion.pos = { x: bestPos.x, y: bestPos.y };
-    
-    // ホームマス登録（CPU チームの初回配置フェーズの3体まで）
-    if (G.homeSquares[cpuTeam].length < 3) {
-      G.homeSquares[cpuTeam].push({ x: bestPos.x, y: bestPos.y });
-      paintTile(G, bestPos.x, bestPos.y, cpuTeam);
-      G.turnLog.push(`(${bestPos.x}, ${bestPos.y}) がホームマスとして登録されました`);
-    }
-    
-    G.turnLog.push(`${getChampionDisplayName(undeployedChampion)} を (${bestPos.x}, ${bestPos.y}) に配置しました`);
-  }
-}
-
 
 const ELEMENT_TYPES: ElementType[] = [
   'normal', 'fire', 'water', 'electric', 'grass', 'ice', 'fighting', 'poison', 'ground', 
@@ -462,7 +409,7 @@ const ELEMENT_TYPES: ElementType[] = [
 const commonMoves = {
     // AIモードの切り替え
     toggleAIMode: ({ G }: { G: GameState }) => {
-      if (G.gamePhase !== 'deploy' && G.gamePhase !== 'planning') return;
+      if (G.gamePhase !== 'planning') return;
       G.aiMode = G.aiMode === 'cpu' ? 'antigravity' : 'cpu';
       G.turnLog.push(`AIモードを ${G.aiMode === 'cpu' ? 'CPU' : 'Antigravity'} に変更しました`);
     },
@@ -943,79 +890,6 @@ const commonMoves = {
       processNextAction(G, random);
     },
 
-    // 配置フェーズ: チャンピオンを配置
-    deployChampion: (
-      { G, playerID, events }: { G: GameState; playerID: string; events: any },
-      championId: string,
-      x: number,
-      y: number
-    ) => {
-      if (G.gamePhase !== 'deploy') return;
-      
-      // 手番チェック
-      if (G.deployTurn && G.deployTurn !== playerID) return;
-
-      const team = playerID as Team;
-      const player = G.players[team];
-      
-      // 3体制限チェック
-      const deployedCount = player.champions.filter(c => c.pos !== null).length;
-      if (deployedCount >= CHAMPIONS_ON_FIELD) return; // 既に3体フィールドにいる
-      
-      const champion = player.champions.find(c => c.id === championId);
-      if (!champion) return;
-      if (champion.pos !== null) return; // 既に配置済み
-      
-      // 配置位置の妥当性チェック（距離制約含む）
-      const pos = { x, y };
-      if (!isValidDeployPosition(G, pos)) {
-        return; // 配置不可（距離制約違反または中央エリア）
-      }
-      
-      // 配置実行
-      champion.pos = { x, y };
-      
-      // ホームマス登録（初回配置フェーズの3体まで）
-      // G.currentPhase === 1 かつ G.turnInPhase === 1（ゲーム開始直後）の間に配置された場所をホームマスとする
-      // より簡易に：homeSquaresが3マス未満の間は登録
-      if (G.homeSquares[team].length < 3) {
-        G.homeSquares[team].push({ x, y });
-        paintTile(G, x, y, team);
-        G.turnLog.push(`(${x}, ${y}) がホームマスとして登録されました`);
-      }
-      
-      G.turnLog.push(`${getChampionDisplayName(champion)} を (${x}, ${y}) に配置しました`);
-      
-      // 手番を交代
-      const nextTurn = G.deployTurn === '0' ? '1' : '0';
-      G.deployTurn = nextTurn;
-      
-      // CPUのターン('1')なら自動配置
-      if (nextTurn === '1') {
-        autoCPUDeploy(G);
-        // CPUが配置したら再度プレイヤーの番に戻す
-        G.deployTurn = '0';
-      }
-      
-      // 配置完了チェック（mainフェーズ中の配置用）
-      const team0Deployed = G.players['0'].champions.filter(c => c.pos !== null).length;
-      const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
-      const team0Ready = team0Deployed >= CHAMPIONS_ON_FIELD || G.players['0'].champions.every(c => 
-        c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
-      );
-      const team1Ready = team1Deployed >= CHAMPIONS_ON_FIELD || G.players['1'].champions.every(c => 
-        c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
-      );
-      
-      if (team0Ready && team1Ready) {
-        // 配置完了 → 計画フェーズへ
-        G.gamePhase = 'planning';
-        G.turnLog.push('--- 配置完了: 計画フェーズ開始 ---');
-      }
-      
-      events.endTurn({ next: G.deployTurn });
-    },
-
 
 };
 
@@ -1092,13 +966,24 @@ export const LoLBoardGame = {
       placed++;
     }
 
+    // ホームマスをベース位置で自動登録
+    const homeSquares: Record<Team, Position[]> = { '0': [], '1': [] };
+    for (const team of ['0', '1'] as Team[]) {
+      for (let i = 0; i < CHAMPIONS_ON_FIELD; i++) {
+        const pos = BASE_POSITIONS[team][i];
+        homeSquares[team].push({ ...pos });
+        // ベース位置を塗る
+        territory[pos.y][pos.x] = team;
+      }
+    }
+
     return {
       players,
       territory,
       scores: { '0': 0, '1': 0 },
-      longestPaintBonusHolder: null, // ★ロンゲストペイントボーナスの初期化
-      pointTokens: [],  // ポイントトークン初期化
-      pendingPointTokens: initialPendingTokens,  // 初期予告トークン（中央に5pt×3）
+      longestPaintBonusHolder: null,
+      pointTokens: [],
+      pendingPointTokens: initialPendingTokens,
       currentPhase: 1,
       turnInPhase: 1,
       turnActions: { 
@@ -1110,10 +995,9 @@ export const LoLBoardGame = {
         '【ルール】先に50ポイント到達で勝利！',
         '【新ルール】ポイントトークンを集めよう！',
         '【注意】3マス未満の陣地は消滅します',
-        'まずはチャンピオンを配置してください'
+        '計画フェーズ開始 - アクションを選択してください'
       ],
-      gamePhase: 'deploy',
-      deployTurn: '0',
+      gamePhase: 'planning',
       winner: null,
       pendingActions: [],
       currentResolvingAction: null,
@@ -1121,90 +1005,26 @@ export const LoLBoardGame = {
       damageEvents: [],
       pointEvents: [],
       cpuActionDelay: 0,
-      homeSquares: { '0': [], '1': [] },
+      homeSquares,
       blocks,
-      resourceNodes,           // ★ 生成した資源ノードを初期化
-      resourceRollResult: null, // ★
+      resourceNodes,
+      resourceRollResult: null,
       aiMode: 'cpu',
       antigravityState: 'idle',
-      merchant: null
+      merchant: null,
+      resourceEvents: []
     };
   },
 
   moves: {
     ...commonMoves
   },
-  
-  phases: {
-    deploy: {
-      start: true,
-      next: 'main',
-      turn: {
-        order: TurnOrder.RESET,
-        activePlayers: { currentPlayer: 'deploy' },
-      },
-      moves: {
-        deployChampion: commonMoves.deployChampion,
-        toggleAIMode: commonMoves.toggleAIMode,
-      },
-      endIf: ({ G }: { G: GameState }) => {
-        // 両チームが3体ずつ配置したら終了
-        const team0Deployed = G.players['0'].champions.filter(c => c.pos !== null).length;
-        const team1Deployed = G.players['1'].champions.filter(c => c.pos !== null).length;
-        // ベンチの数や撃破状態も考慮必要だが、初期配置・再配置フェーズでは
-        // 「出撃可能なチャンピオン(knockoutTurns=0)で、まだFieldにいないもの」を出し切るまで、あるいはFieldが3体になるまで
-        
-        // 簡易判定: Field上限(3)に達しているか、または出せる駒がもうない
-        // HP 0のチャンピオンは配置不可として扱う
-        const team0Ready = team0Deployed >= 3 || G.players['0'].champions.every(c => 
-          c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
-        );
-        const team1Ready = team1Deployed >= 3 || G.players['1'].champions.every(c => 
-          c.pos !== null || c.knockoutTurnsRemaining > 0 || c.currentHp <= 0
-        );
-        
-        console.log('[DEBUG] Deploy endIf check:', {
-          team0Deployed,
-          team1Deployed,
-          team0Ready,
-          team1Ready,
-          team0Champions: G.players['0'].champions.map(c => ({
-            id: c.definitionId,
-            pos: c.pos,
-            hp: c.currentHp,
-            knockout: c.knockoutTurnsRemaining
-          })),
-          team1Champions: G.players['1'].champions.map(c => ({
-            id: c.definitionId,
-            pos: c.pos,
-            hp: c.currentHp,
-            knockout: c.knockoutTurnsRemaining
-          }))
-        });
-        
-        return team0Ready && team1Ready;
-      },
-      onEnd: ({ G }: { G: GameState }) => {
-        G.gamePhase = 'planning';
-        G.turnLog.push('--- 配置完了: 計画フェーズ開始 ---');
-      }
-    },
-    main: {
-      moves: {
-        ...commonMoves,
-        deployChampion: commonMoves.deployChampion,
-      }
-    }
-  },
 
   turn: {
     activePlayers: ActivePlayers.ALL,
     onBegin: ({ G }: { G: GameState }) => {
       G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
-      // 配置フェーズ中はgamePhaseを上書きしない
-      if (G.gamePhase !== 'deploy') {
-        G.gamePhase = 'planning';
-      }
+      G.gamePhase = 'planning';
       G.pendingActions = [];
       G.currentResolvingAction = null;
       G.awaitingTargetSelection = false;
@@ -1224,18 +1044,6 @@ export const LoLBoardGame = {
     // スコアベースの勝利判定（50ポイント到達）
     if (G.scores['0'] >= VICTORY_SCORE) return { winner: '0' };
     if (G.scores['1'] >= VICTORY_SCORE) return { winner: '1' };
-    
-    // 全員ひんし敗北判定: フィールド上のチャンピオンが0体になったチームの負け
-    // ただし配置フェーズ中（deploy）は判定しない（まだ誰も配置していないため）
-    if (G.gamePhase !== 'deploy') {
-      for (const team of ['0', '1'] as Team[]) {
-        const enemyTeam = team === '0' ? '1' : '0';
-        const hasFieldChampion = G.players[team].champions.some(c => c.pos !== null);
-        if (!hasFieldChampion) {
-          return { winner: enemyTeam };
-        }
-      }
-    }
     
     return undefined;
   },
@@ -1965,23 +1773,6 @@ function paintPathBetween(G: GameState, start: Position, end: Position, team: Te
   }
 }
 
-/**
- * 配置が必要かどうかをチェック
- * 場に3体未満のチームがあり、かつ配置可能なチャンピオン（ノックアウトされていない控え）がいる場合true
- */
-function needsDeployPhase(G: GameState): boolean {
-  for (const team of ['0', '1'] as Team[]) {
-    const deployedCount = G.players[team].champions.filter(c => c.pos !== null).length;
-    const canDeployMore = G.players[team].champions.some(c => 
-      c.pos === null && c.knockoutTurnsRemaining === 0 && c.currentHp > 0
-    );
-    // 3体未満で、かつ配置可能なチャンピオンがいる
-    if (deployedCount < CHAMPIONS_ON_FIELD && canDeployMore) {
-      return true;
-    }
-  }
-  return false;
-}
 
 /**
  * ランダムイベントの発生（フェイズ開始時）
@@ -2081,14 +1872,8 @@ function finishResolutionPhase(G: GameState, random: any) {
   
   G.turnLog.push('--- ターン終了 ---');
   
-  // 配置が必要なら配置フェーズ、そうでなければ計画フェーズ
-  if (needsDeployPhase(G)) {
-    G.gamePhase = 'deploy';
-    G.deployTurn = '0';
-    G.turnLog.push('--- 配置フェーズ開始 ---');
-  } else {
-    G.gamePhase = 'planning';
-  }
+  // 常に計画フェーズへ（配置フェーズは廃止、リスポーンは自動）
+  G.gamePhase = 'planning';
 }
 
 /**
@@ -2135,7 +1920,33 @@ function processKnockoutCountdown(G: GameState) {
       if (champion.knockoutTurnsRemaining > 0) {
         champion.knockoutTurnsRemaining--;
         if (champion.knockoutTurnsRemaining === 0) {
+          // HP全回復
           champion.currentHp = champion.maxHp;
+          
+          // ベース位置の空きスロットに自動リスポーン
+          const basePositions = BASE_POSITIONS[team];
+          const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+          
+          let respawnPos: Position | null = null;
+          for (const pos of basePositions) {
+            const isOccupied = allChampions.some(c =>
+              c.pos !== null && c.pos.x === pos.x && c.pos.y === pos.y
+            );
+            if (!isOccupied) {
+              respawnPos = pos;
+              break;
+            }
+          }
+          
+          if (respawnPos) {
+            champion.pos = { ...respawnPos };
+            paintTile(G, respawnPos.x, respawnPos.y, team);
+            const def = getChampionById(champion.definitionId);
+            G.turnLog.push(`🔄 ${getChampionDisplayName(champion)} がベースにリスポーン！(${respawnPos.x}, ${respawnPos.y})`);
+          } else {
+            // 全ベース位置が埋まっている場合はベンチ待機（殊なケース）
+            G.turnLog.push(`⚠️ ${getChampionDisplayName(champion)} のリスポーン位置が埋まっているため待機中...`);
+          }
         }
       }
     }
