@@ -1,10 +1,10 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { BoardProps } from 'boardgame.io/react';
-import { GameState, Team, ChampionInstance, Card, Position, DamageEvent, Block, PointEvent } from '../game/types';
+import { GameState, Team, ChampionInstance, Card, Position, DamageEvent, Block, PointEvent, ResourceEvent } from '../game/types';
 import { getChampionById } from '../game/champions';
 import { getSpawnPositions, isValidDeployPosition, findReachablePositionsWithPath } from '../game/Game';
-import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move } from 'lucide-react';
+import { Shield, Zap, Flame, Droplets, Bug, Moon, Cog, Check, X, Target, Move, ShoppingCart } from 'lucide-react';
 import { ChampionIcon } from './champions/ChampionIcon';
 import { AttackEffect } from './effects/AttackEffect';
 
@@ -42,9 +42,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const [selectedEnemyChampionId, setSelectedEnemyChampionId] = useState<string | null>(null);
   const [visibleDamageEvents, setVisibleDamageEvents] = useState<VisibleDamageEvent[]>([]);
   const [visiblePointEvents, setVisiblePointEvents] = useState<PointEvent[]>([]);
+  const [visibleResourceEvents, setVisibleResourceEvents] = useState<ResourceEvent[]>([]);
   const [hoveredMovePos, setHoveredMovePos] = useState<Position | null>(null); // 経路プレビュー用
   const processedEventIdsRef = useRef<Set<string>>(new Set());
   const processedPointEventIdsRef = useRef<Set<string>>(new Set());
+  const processedResourceEventIdsRef = useRef<Set<string>>(new Set());
 
   const myPlayerID = (playerID || '0') as Team;
   const myPlayerState = G.players[myPlayerID];
@@ -146,6 +148,31 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       }, 1500);
     }
   }, [G.pointEvents]);
+
+  // 資源獲得イベントの処理（アニメーション用）
+  useEffect(() => {
+    // GameState.ts側で resourceEvents が追加された以降のデータ用
+    if (!G.resourceEvents || G.resourceEvents.length === 0) return;
+
+    // 新しい資源イベントを処理
+    const newEvents: ResourceEvent[] = [];
+
+    for (const event of G.resourceEvents) {
+      if (processedResourceEventIdsRef.current.has(event.id)) continue;
+      processedResourceEventIdsRef.current.add(event.id);
+      newEvents.push(event);
+    }
+
+    if (newEvents.length > 0) {
+      setVisibleResourceEvents(prev => [...prev, ...newEvents]);
+
+      // 2秒後にイベントを削除 (少し長めに見せる)
+      const eventIds = newEvents.map(e => e.id);
+      setTimeout(() => {
+        setVisibleResourceEvents(prev => prev.filter(e => !eventIds.includes(e.id)));
+      }, 2000);
+    }
+  }, [G.resourceEvents]);
 
   // Antigravityモードの処理（状態のエクスポートと手番のロード）
   useEffect(() => {
@@ -399,12 +426,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     }
   };
 
-  const handleCardClick = (card: Card, isAlternative = false) => {
+  const handleCardClick = (card: Card, isAlternative = false, isAlternativePurchase = false) => {
     if (G.gamePhase !== 'planning') return;
     if (!selectedChampion) return;
     if (actingChampionIds.includes(selectedChampion.id)) return;
 
-    moves.selectCard(selectedChampion.id, card.id, isAlternative);
+    moves.selectCard(selectedChampion.id, card.id, isAlternative, isAlternativePurchase);
     setSelectedChampionId(null);
   };
 
@@ -694,7 +721,9 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   actionText = 'ガード';
                 } else {
                   const card = champion.cards.find(c => c.id === action.cardId);
-                  if (action.isAlternativeMove) {
+                  if ('isAlternativePurchase' in action && action.isAlternativePurchase) {
+                    actionText = `${card?.nameJa || 'カード'} (代替購入)`;
+                  } else if (action.isAlternativeMove) {
                     actionText = `${card?.nameJa || 'カード'} (1マス移動)`;
                   } else {
                     actionText = card?.nameJa || 'カード';
@@ -834,20 +863,32 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                   {/* 資源ノード表示 */}
                   {G.resourceNodes
                     ?.filter(n => n.x === x && n.y === y)
-                    .map((node, idx) => (
-                      <div
-                        key={`resource-${idx}`}
-                        className={`absolute inset-0.5 rounded-full flex flex-col items-center justify-center z-10 opacity-70 pointer-events-none border-2
-                          ${node.type === 'wood' ? 'bg-green-900 border-green-500 text-green-300'
-                            : 'bg-stone-800 border-stone-500 text-stone-300'}`}
-                        title={`${node.type} 産出 (出目: ${node.triggerNumber})`}
-                      >
-                        <span className="text-[10px]">
-                          {node.type === 'wood' ? '🌲' : '⛰️'}
-                        </span>
-                        <span className="text-[12px] font-bold leading-none">{node.triggerNumber}</span>
-                      </div>
-                    ))
+                    .map((node, idx) => {
+                      // アニメーション中の資源ノードかどうか
+                      const isGettingResource = visibleResourceEvents.some(e => e.x === x && e.y === y && e.type === node.type);
+                      return (
+                        <div
+                          key={`resource-${idx}`}
+                          className={`absolute inset-0.5 rounded-full flex flex-col items-center justify-center z-10 opacity-70 pointer-events-none border-2 transition-all duration-300
+                            ${node.type === 'wood' ? 'bg-green-900 border-green-500 text-green-300'
+                              : 'bg-stone-800 border-stone-500 text-stone-300'}
+                            ${isGettingResource ? 'animate-pulse ring-4 ring-yellow-400 scale-110 opacity-100 shadow-[0_0_15px_rgba(250,204,21,0.8)]' : ''}`}
+                          title={`${node.type} 産出 (出目: ${node.triggerNumber})`}
+                        >
+                          <span className="text-[10px]">
+                            {node.type === 'wood' ? '🌲' : '⛰️'}
+                          </span>
+                          <span className="text-[12px] font-bold leading-none">{node.triggerNumber}</span>
+
+                          {/* ポップアップテキスト（+1） */}
+                          {isGettingResource && (
+                            <span className="absolute -top-6 text-yellow-300 font-bold text-sm animate-bounce drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                              +1
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
                   }
 
                   {/* ブロック障害物表示 */}
@@ -865,6 +906,18 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                       </div>
                     ))
                   }
+
+                  {/* 商人表示 */}
+                  {G.merchant && G.merchant.x === x && G.merchant.y === y && (
+                    <div
+                      key={`merchant-${G.merchant.id}`}
+                      className={`absolute inset-0.5 rounded-sm flex items-center justify-center z-15 bg-indigo-700/80 border-2 border-indigo-400 shadow-lg`}
+                      title={`商人: 代替購入で資源を10ptに交換`}
+                    >
+                      <ShoppingCart size={20} className="text-yellow-300 animate-bounce" />
+                    </div>
+                  )}
+
                   {G.pointTokens
                     ?.filter(t => t.x === x && t.y === y)
                     .map((token, idx) => (
@@ -960,71 +1013,94 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                     </div>
                   ) : (
                     <>
-                      {selectedChampion.cards.map(card => {
-                        const typeConfig = getTypeConfig(card.type);
-                        const onCooldown = card.currentCooldown > 0;
-                        return (
-                          <div
-                            key={card.id}
-                            className="flex items-stretch gap-1 mb-2"
-                          >
-                            {/* 通常使用ボタン（カード本体） */}
+                      {(() => {
+                        const isNearMerchant = G.merchant && selectedChampion?.pos &&
+                          (Math.abs(G.merchant.x - selectedChampion.pos.x) + Math.abs(G.merchant.y - selectedChampion.pos.y) <= 1);
+
+                        return selectedChampion.cards.map(card => {
+                          const typeConfig = getTypeConfig(card.type);
+                          const onCooldown = card.currentCooldown > 0;
+                          return (
                             <div
-                              className={`flex-1 p-2 rounded border transition-all group ${onCooldown
-                                ? 'border-slate-700 bg-slate-900 opacity-50 cursor-not-allowed'
-                                : 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-yellow-400 cursor-pointer'
-                                }`}
-                              onClick={() => !onCooldown && handleCardClick(card, false)}
+                              key={card.id}
+                              className="flex items-stretch gap-1 mb-2"
                             >
-                              <div className="flex items-center gap-1">
-                                <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5 ${onCooldown ? 'opacity-50' : ''}`}>
-                                  {typeConfig.icon}
-                                  <span className="text-[10px] text-white">{card.priority > 0 ? `+${card.priority}` : card.priority}</span>
-                                </div>
-                                <span className={`text-xs font-bold ${onCooldown ? 'text-slate-500' : 'group-hover:text-yellow-200'}`}>{card.nameJa}</span>
-                                {onCooldown && (
-                                  <span className="ml-auto text-[10px] text-red-400 font-bold">CD: {card.currentCooldown}</span>
-                                )}
-                              </div>
-                              <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
-                                {card.power > 0 && <span>威力:{card.power}</span>}
-                                {card.move > 0 && <span>移動:{card.move}</span>}
-                                {card.power > 0 && <span className="text-orange-300">範囲:{card.attackRange ?? (card.move > 0 ? 1 : 2)}</span>}
-                              </div>
-                              {/* 資源コスト表示 */}
-                              {card.resourceCost && (
-                                <div className="flex gap-1 text-[10px] mt-1 p-1 bg-slate-900/50 rounded flex-wrap">
-                                  <span className="text-slate-300 font-bold">コスト: </span>
-                                  {!selectedChampion?.usedSkillIds.includes(card.id) ? (
-                                    <span className="text-yellow-400 font-bold animate-pulse">初回無料！</span>
-                                  ) : (
-                                    <>
-                                      {card.resourceCost.wood ? <span className="text-green-400">🌲{card.resourceCost.wood}</span> : null}
-                                      {card.resourceCost.stone ? <span className="text-stone-400">⛰️{card.resourceCost.stone}</span> : null}
-                                    </>
+                              {/* 通常使用ボタン（カード本体） */}
+                              <div
+                                className={`flex-1 p-2 rounded border transition-all group ${onCooldown
+                                  ? 'border-slate-700 bg-slate-900 opacity-50 cursor-not-allowed'
+                                  : 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-yellow-400 cursor-pointer'
+                                  }`}
+                                onClick={() => !onCooldown && handleCardClick(card, false)}
+                              >
+                                <div className="flex items-center gap-1">
+                                  <div className={`${typeConfig.bgColor} rounded px-1 py-0.5 flex items-center gap-0.5 ${onCooldown ? 'opacity-50' : ''}`}>
+                                    {typeConfig.icon}
+                                    <span className="text-[10px] text-white">{card.priority > 0 ? `+${card.priority}` : card.priority}</span>
+                                  </div>
+                                  <span className={`text-xs font-bold ${onCooldown ? 'text-slate-500' : 'group-hover:text-yellow-200'}`}>{card.nameJa}</span>
+                                  {onCooldown && (
+                                    <span className="ml-auto text-[10px] text-red-400 font-bold">CD: {card.currentCooldown}</span>
                                   )}
                                 </div>
+                                <div className="flex gap-2 text-[10px] text-slate-400 mt-1">
+                                  {card.power > 0 && <span>威力:{card.power}</span>}
+                                  {card.move > 0 && <span>移動:{card.move}</span>}
+                                  {card.power > 0 && <span className="text-orange-300">範囲:{card.attackRange ?? (card.move > 0 ? 1 : 2)}</span>}
+                                </div>
+                                {/* 資源コスト表示 */}
+                                {card.resourceCost && (
+                                  <div className="flex gap-1 text-[10px] mt-1 p-1 bg-slate-900/50 rounded flex-wrap">
+                                    <span className="text-slate-300 font-bold">コスト: </span>
+                                    {!selectedChampion?.usedSkillIds.includes(card.id) ? (
+                                      <span className="text-yellow-400 font-bold animate-pulse">初回無料！</span>
+                                    ) : (
+                                      <>
+                                        {card.resourceCost.wood ? <span className="text-green-400">🌲{card.resourceCost.wood}</span> : null}
+                                        {card.resourceCost.stone ? <span className="text-stone-400">⛰️{card.resourceCost.stone}</span> : null}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 代替アクション（移動）ボタン */}
+                              <button
+                                className={`w-10 flex items-center justify-center rounded border transition-all shadow-sm ${onCooldown
+                                  ? 'border-slate-700 bg-slate-900 text-slate-600 cursor-not-allowed opacity-50'
+                                  : 'border-slate-600 bg-slate-700 text-green-500 hover:bg-green-700 hover:border-green-400 hover:text-white'
+                                  }`}
+                                disabled={onCooldown}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!onCooldown) handleCardClick(card, true, false);
+                                }}
+                                title="代替アクション: 上下左右に1マス移動"
+                              >
+                                <Move size={20} />
+                              </button>
+
+                              {/* 代替購入（商人）ボタン */}
+                              {isNearMerchant && (
+                                <button
+                                  className={`w-10 flex items-center justify-center rounded border transition-all shadow-sm ${onCooldown
+                                    ? 'border-slate-700 bg-slate-900 text-slate-600 cursor-not-allowed opacity-50'
+                                    : 'border-indigo-600 bg-indigo-900 shadow-[0_0_10px_rgba(79,70,229,0.5)] text-yellow-300 hover:bg-indigo-700 hover:border-indigo-400 hover:text-white'
+                                    }`}
+                                  disabled={onCooldown}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!onCooldown) handleCardClick(card, false, true);
+                                  }}
+                                  title={`代替購入: 木1,石1 を消費して 10pt獲得`}
+                                >
+                                  <ShoppingCart size={18} />
+                                </button>
                               )}
                             </div>
-
-                            {/* 代替アクション（移動）ボタン */}
-                            <button
-                              className={`w-10 flex items-center justify-center rounded border transition-all shadow-sm ${onCooldown
-                                ? 'border-slate-700 bg-slate-900 text-slate-600 cursor-not-allowed opacity-50'
-                                : 'border-slate-600 bg-slate-700 text-green-500 hover:bg-green-700 hover:border-green-400 hover:text-white'
-                                }`}
-                              disabled={onCooldown}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!onCooldown) handleCardClick(card, true);
-                              }}
-                              title="代替アクション: 上下左右に1マス移動"
-                            >
-                              <Move size={20} />
-                            </button>
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                      })()}
 
                       {selectedChampion.cards.filter(c => c.currentCooldown === 0).length >= 2 && (
                         <button

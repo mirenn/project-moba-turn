@@ -1,0 +1,1208 @@
+{
+  "players": {
+    "0": {
+      "team": "0",
+      "selectedChampionIds": [
+        "gekogekoga",
+        "enshishi",
+        "raichou",
+        "kidouba"
+      ],
+      "champions": [
+        {
+          "id": "0-gekogekoga-0",
+          "definitionId": "gekogekoga",
+          "team": "0",
+          "currentHp": 40,
+          "maxHp": 80,
+          "currentType": "water",
+          "pos": {
+            "x": 6,
+            "y": 3
+          },
+          "cards": [
+            {
+              "id": "gekogekoga-tonbogaeri",
+              "name": "u-turn",
+              "nameJa": "とんぼがえり",
+              "type": "bug",
+              "priority": 100,
+              "power": 20,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。成功時、控えと交代",
+              "effectFn": "uturn",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "gekogekoga-mizushuriken",
+              "name": "water-shuriken",
+              "nameJa": "みずしゅりけん",
+              "type": "water",
+              "priority": 90,
+              "power": 20,
+              "move": 0,
+              "attackRange": 1,
+              "effect": "隣接1体に20ダメージを2〜4回攻撃",
+              "effectFn": "multiHit",
+              "cooldown": 2,
+              "currentCooldown": 1
+            },
+            {
+              "id": "gekogekoga-akunohadou",
+              "name": "dark-pulse",
+              "nameJa": "あくのはどう",
+              "type": "dark",
+              "priority": 75,
+              "power": 80,
+              "move": 0,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。20%で相手のこのターンの行動を無効化",
+              "effectFn": "flinch",
+              "cooldown": 3,
+              "currentCooldown": 0
+            },
+            {
+              "id": "gekogekoga-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 50,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": []
+        },
+        {
+          "id": "0-enshishi-1",
+          "definitionId": "enshishi",
+          "team": "0",
+          "currentHp": 85,
+          "maxHp": 85,
+          "currentType": "fire",
+          "pos": {
+            "x": 12,
+            "y": 7
+          },
+          "cards": [
+            {
+              "id": "enshishi-kaenhosha",
+              "name": "flamethrower",
+              "nameJa": "かえんほうしゃ",
+              "type": "fire",
+              "priority": 65,
+              "power": 90,
+              "move": 0,
+              "attackRange": 8,
+              "isDirectional": true,
+              "lineRange": 8,
+              "effect": "指定方向に8マスの直線攻撃",
+              "cooldown": 3,
+              "currentCooldown": 1,
+              "resourceCost": {
+                "wood": 1
+              }
+            },
+            {
+              "id": "enshishi-flaredrive",
+              "name": "flare-blitz",
+              "nameJa": "フレアドライブ",
+              "type": "fire",
+              "priority": 95,
+              "power": 120,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "1マス移動後攻撃。自身も与ダメージの1/3を受ける",
+              "effectFn": "recoil",
+              "cooldown": 4,
+              "currentCooldown": 0,
+              "resourceCost": {
+                "wood": 2
+              }
+            },
+            {
+              "id": "enshishi-honoonokiba",
+              "name": "fire-fang",
+              "nameJa": "ほのおのキバ",
+              "type": "fire",
+              "priority": 95,
+              "power": 65,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。10%で相手をやけど状態にする",
+              "effectFn": "burn",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "enshishi-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 45,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": [
+            "enshishi-kaenhosha"
+          ]
+        },
+        {
+          "id": "0-raichou-2",
+          "definitionId": "raichou",
+          "team": "0",
+          "currentHp": 75,
+          "maxHp": 75,
+          "currentType": "electric",
+          "pos": {
+            "x": 3,
+            "y": 11
+          },
+          "cards": [
+            {
+              "id": "raichou-10manvolt",
+              "name": "thunderbolt",
+              "nameJa": "10まんボルト",
+              "type": "electric",
+              "priority": 70,
+              "power": 90,
+              "move": 0,
+              "attackRange": 2,
+              "effect": "2マス以内の1体にダメージ",
+              "cooldown": 2,
+              "currentCooldown": 0,
+              "resourceCost": {
+                "stone": 1
+              }
+            },
+            {
+              "id": "raichou-denkousekka",
+              "name": "quick-attack",
+              "nameJa": "でんこうせっか",
+              "type": "normal",
+              "priority": 115,
+              "power": 40,
+              "move": 2,
+              "attackRange": 1,
+              "effect": "2マス移動後、隣接1体に攻撃",
+              "cooldown": 1,
+              "currentCooldown": 0
+            },
+            {
+              "id": "raichou-voltchange",
+              "name": "volt-switch",
+              "nameJa": "ボルトチェンジ",
+              "type": "electric",
+              "priority": 85,
+              "power": 70,
+              "move": 0,
+              "attackRange": 2,
+              "effect": "2マス以内の1体に攻撃。成功時、控えと交代",
+              "effectFn": "uturn",
+              "cooldown": 2,
+              "currentCooldown": 1
+            },
+            {
+              "id": "raichou-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 40,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": []
+        },
+        {
+          "id": "0-kidouba-3",
+          "definitionId": "kidouba",
+          "team": "0",
+          "currentHp": 70,
+          "maxHp": 70,
+          "currentType": "steel",
+          "pos": null,
+          "cards": [
+            {
+              "id": "kidouba-shissou",
+              "name": "gallop",
+              "nameJa": "しっそう",
+              "type": "normal",
+              "priority": 110,
+              "power": 0,
+              "move": 5,
+              "attackRange": 0,
+              "effect": "直線方向に5マスまで移動",
+              "effectFn": "linearMove",
+              "cooldown": 1,
+              "currentCooldown": 0,
+              "resourceCost": {
+                "wood": 1
+              }
+            },
+            {
+              "id": "kidouba-fumitsuke",
+              "name": "stomp",
+              "nameJa": "ふみつけ",
+              "type": "ground",
+              "priority": 60,
+              "power": 50,
+              "move": 1,
+              "attackRange": 1,
+              "isSurroundingAoE": true,
+              "effect": "周囲1マス全体に攻撃（発動時に自動発生）",
+              "cooldown": 3,
+              "currentCooldown": 0
+            },
+            {
+              "id": "kidouba-ironhead",
+              "name": "iron-head",
+              "nameJa": "アイアンヘッド",
+              "type": "steel",
+              "priority": 70,
+              "power": 80,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。30%で相手をひるませる",
+              "effectFn": "flinch",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "kidouba-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 55,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": []
+        }
+      ],
+      "resources": {
+        "wood": 0,
+        "stone": 3
+      }
+    },
+    "1": {
+      "team": "1",
+      "selectedChampionIds": [
+        "kidouba",
+        "raichou",
+        "enshishi",
+        "gekogekoga"
+      ],
+      "champions": [
+        {
+          "id": "1-kidouba-0",
+          "definitionId": "kidouba",
+          "team": "1",
+          "currentHp": 70,
+          "maxHp": 70,
+          "currentType": "steel",
+          "pos": {
+            "x": 0,
+            "y": 6
+          },
+          "cards": [
+            {
+              "id": "kidouba-shissou",
+              "name": "gallop",
+              "nameJa": "しっそう",
+              "type": "normal",
+              "priority": 110,
+              "power": 0,
+              "move": 5,
+              "attackRange": 0,
+              "effect": "直線方向に5マスまで移動",
+              "effectFn": "linearMove",
+              "cooldown": 1,
+              "currentCooldown": 0,
+              "resourceCost": {
+                "wood": 1
+              }
+            },
+            {
+              "id": "kidouba-fumitsuke",
+              "name": "stomp",
+              "nameJa": "ふみつけ",
+              "type": "ground",
+              "priority": 60,
+              "power": 50,
+              "move": 1,
+              "attackRange": 1,
+              "isSurroundingAoE": true,
+              "effect": "周囲1マス全体に攻撃（発動時に自動発生）",
+              "cooldown": 3,
+              "currentCooldown": 0
+            },
+            {
+              "id": "kidouba-ironhead",
+              "name": "iron-head",
+              "nameJa": "アイアンヘッド",
+              "type": "steel",
+              "priority": 70,
+              "power": 80,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。30%で相手をひるませる",
+              "effectFn": "flinch",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "kidouba-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 55,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": [
+            "kidouba-shissou"
+          ]
+        },
+        {
+          "id": "1-raichou-1",
+          "definitionId": "raichou",
+          "team": "1",
+          "currentHp": 75,
+          "maxHp": 75,
+          "currentType": "electric",
+          "pos": {
+            "x": 4,
+            "y": 4
+          },
+          "cards": [
+            {
+              "id": "raichou-10manvolt",
+              "name": "thunderbolt",
+              "nameJa": "10まんボルト",
+              "type": "electric",
+              "priority": 70,
+              "power": 90,
+              "move": 0,
+              "attackRange": 2,
+              "effect": "2マス以内の1体にダメージ",
+              "cooldown": 2,
+              "currentCooldown": 0,
+              "resourceCost": {
+                "stone": 1
+              }
+            },
+            {
+              "id": "raichou-denkousekka",
+              "name": "quick-attack",
+              "nameJa": "でんこうせっか",
+              "type": "normal",
+              "priority": 115,
+              "power": 40,
+              "move": 2,
+              "attackRange": 1,
+              "effect": "2マス移動後、隣接1体に攻撃",
+              "cooldown": 1,
+              "currentCooldown": 0
+            },
+            {
+              "id": "raichou-voltchange",
+              "name": "volt-switch",
+              "nameJa": "ボルトチェンジ",
+              "type": "electric",
+              "priority": 85,
+              "power": 70,
+              "move": 0,
+              "attackRange": 2,
+              "effect": "2マス以内の1体に攻撃。成功時、控えと交代",
+              "effectFn": "uturn",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "raichou-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 40,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": [
+            "raichou-10manvolt"
+          ]
+        },
+        {
+          "id": "1-enshishi-2",
+          "definitionId": "enshishi",
+          "team": "1",
+          "currentHp": 85,
+          "maxHp": 85,
+          "currentType": "fire",
+          "pos": {
+            "x": 5,
+            "y": 8
+          },
+          "cards": [
+            {
+              "id": "enshishi-kaenhosha",
+              "name": "flamethrower",
+              "nameJa": "かえんほうしゃ",
+              "type": "fire",
+              "priority": 65,
+              "power": 90,
+              "move": 0,
+              "attackRange": 8,
+              "isDirectional": true,
+              "lineRange": 8,
+              "effect": "指定方向に8マスの直線攻撃",
+              "cooldown": 3,
+              "currentCooldown": 0,
+              "resourceCost": {
+                "wood": 1
+              }
+            },
+            {
+              "id": "enshishi-flaredrive",
+              "name": "flare-blitz",
+              "nameJa": "フレアドライブ",
+              "type": "fire",
+              "priority": 95,
+              "power": 120,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "1マス移動後攻撃。自身も与ダメージの1/3を受ける",
+              "effectFn": "recoil",
+              "cooldown": 4,
+              "currentCooldown": 3,
+              "resourceCost": {
+                "wood": 2
+              }
+            },
+            {
+              "id": "enshishi-honoonokiba",
+              "name": "fire-fang",
+              "nameJa": "ほのおのキバ",
+              "type": "fire",
+              "priority": 95,
+              "power": 65,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。10%で相手をやけど状態にする",
+              "effectFn": "burn",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "enshishi-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 45,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": [
+            "enshishi-flaredrive"
+          ]
+        },
+        {
+          "id": "1-gekogekoga-3",
+          "definitionId": "gekogekoga",
+          "team": "1",
+          "currentHp": 80,
+          "maxHp": 80,
+          "currentType": "water",
+          "pos": null,
+          "cards": [
+            {
+              "id": "gekogekoga-tonbogaeri",
+              "name": "u-turn",
+              "nameJa": "とんぼがえり",
+              "type": "bug",
+              "priority": 100,
+              "power": 20,
+              "move": 1,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。成功時、控えと交代",
+              "effectFn": "uturn",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "gekogekoga-mizushuriken",
+              "name": "water-shuriken",
+              "nameJa": "みずしゅりけん",
+              "type": "water",
+              "priority": 90,
+              "power": 20,
+              "move": 0,
+              "attackRange": 1,
+              "effect": "隣接1体に20ダメージを2〜4回攻撃",
+              "effectFn": "multiHit",
+              "cooldown": 2,
+              "currentCooldown": 0
+            },
+            {
+              "id": "gekogekoga-akunohadou",
+              "name": "dark-pulse",
+              "nameJa": "あくのはどう",
+              "type": "dark",
+              "priority": 75,
+              "power": 80,
+              "move": 0,
+              "attackRange": 1,
+              "effect": "隣接1体に攻撃。20%で相手のこのターンの行動を無効化",
+              "effectFn": "flinch",
+              "cooldown": 3,
+              "currentCooldown": 0
+            },
+            {
+              "id": "gekogekoga-swap",
+              "name": "swap",
+              "nameJa": "交代",
+              "type": "normal",
+              "priority": 50,
+              "power": 0,
+              "move": 0,
+              "isSwap": true,
+              "effect": "控えのチャンピオンと交代する",
+              "cooldown": 1,
+              "currentCooldown": 0
+            }
+          ],
+          "isGuarding": false,
+          "knockoutTurnsRemaining": 0,
+          "isAwakened": false,
+          "usedSkillIds": []
+        }
+      ],
+      "resources": {
+        "wood": 0,
+        "stone": 0
+      }
+    }
+  },
+  "territory": [
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      "0",
+      "0",
+      "0",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      "1",
+      "1",
+      "1",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      "1",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0",
+      "0"
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      "1",
+      "1",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      "0",
+      "0",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    [
+      null,
+      null,
+      null,
+      null,
+      "0",
+      "0",
+      "0",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  ],
+  "scores": {
+    "0": 15,
+    "1": 0
+  },
+  "longestPaintBonusHolder": "0",
+  "pointTokens": [
+    {
+      "x": 6,
+      "y": 5,
+      "value": 5
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "value": 5
+    },
+    {
+      "x": 12,
+      "y": 11,
+      "value": 5
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "value": 5
+    },
+    {
+      "x": 5,
+      "y": 9,
+      "value": 1
+    }
+  ],
+  "pendingPointTokens": [
+    {
+      "x": 5,
+      "y": 6,
+      "value": 5
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "value": 1
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "value": 5
+    }
+  ],
+  "currentPhase": 1,
+  "turnInPhase": 3,
+  "turnActions": {
+    "0": {
+      "actions": [
+        {
+          "championId": "0-gekogekoga-0",
+          "cardId": "gekogekoga-akunohadou",
+          "isAlternativeMove": true
+        },
+        {
+          "championId": "0-enshishi-1",
+          "cardId": "enshishi-flaredrive",
+          "isAlternativeMove": true
+        }
+      ]
+    },
+    "1": {
+      "actions": []
+    }
+  },
+  "turnLog": [
+    "ゲーム開始 - 13×13ボード（陣取りモード）",
+    "【ルール】先に50ポイント到達で勝利！",
+    "【新ルール】ポイントトークンを集めよう！",
+    "【注意】3マス未満の陣地は消滅します",
+    "まずはチャンピオンを配置してください",
+    "(4, 3) がホームマスとして登録されました",
+    "[青]ゲコゲコガ を (4, 3) に配置しました",
+    "(4, 7) がホームマスとして登録されました",
+    "[赤]機動馬 を (4, 7) に配置しました",
+    "(12, 7) がホームマスとして登録されました",
+    "[青]炎獅子 を (12, 7) に配置しました",
+    "(6, 4) がホームマスとして登録されました",
+    "[赤]雷鳥 を (6, 4) に配置しました",
+    "(6, 12) がホームマスとして登録されました",
+    "[青]雷鳥 を (6, 12) に配置しました",
+    "(6, 8) がホームマスとして登録されました",
+    "[赤]炎獅子 を (6, 8) に配置しました",
+    "--- 配置完了: 計画フェーズ開始 ---",
+    "--- 配置完了: 計画フェーズ開始 ---",
+    "AIモードを Antigravity に変更しました",
+    "Antigravityの行動を待機しています...",
+    "--- 解決フェーズ開始 (Antigravity行動受付完了) ---",
+    "[あなたの番] [青]雷鳥 の でんこうせっか - ターゲットを選択してください",
+    "[青]雷鳥 は (4, 12) に移動した（代替アクション）",
+    "[Antigravity] [赤]機動馬 が しっそう を使用 - ターゲット選択待ち...",
+    "✨ [赤]機動馬 は初めて しっそう を使うため、資源コスト0で発動！",
+    "[赤]機動馬 は (0, 6) に移動した",
+    "[Antigravity] [赤]雷鳥 が 10まんボルト を使用 - ターゲット選択待ち...",
+    "✨ [赤]雷鳥 は初めて 10まんボルト を使うため、資源コスト0で発動！",
+    "[あなたの番] [青]炎獅子 の かえんほうしゃ - ターゲットを選択してください",
+    "✨ [青]炎獅子 は初めて かえんほうしゃ を使うため、資源コスト0で発動！",
+    "[青]炎獅子 の かえんほうしゃ！",
+    "🌟 青チームが盤面を12マス塗り、ロンゲストペイントボーナス(+10pt)を獲得！",
+    "青チームが 石 を獲得！(6, 12)",
+    "スコア - 青: 10pt, 赤: 0pt",
+    "ポイントトークン(5pt)が (6, 5) に出現！",
+    "ポイントトークン(5pt)が (6, 7) に出現！",
+    "ポイントトークン(5pt)が (7, 6) に出現！",
+    "💫 ポイント予告: (12, 11) に 5pt が次ターン出現予定",
+    "💫 ポイント予告: (5, 5) に 5pt が次ターン出現予定",
+    "💫 ポイント予告: (5, 9) に 1pt が次ターン出現予定",
+    "--- ターン終了 ---",
+    "Antigravityの行動を待機しています...",
+    "--- 解決フェーズ開始 (Antigravity行動受付完了) ---",
+    "[CPU] [赤]雷鳥 が でんこうせっか を使用...",
+    "[赤]雷鳥 は (4, 4) に移動した",
+    "[赤]雷鳥 の でんこうせっか！ [青]ゲコゲコガ に 40 ダメージ",
+    "[CPU] [赤]炎獅子 が フレアドライブ を使用...",
+    "✨ [赤]炎獅子 は初めて フレアドライブ を使うため、資源コスト0で発動！",
+    "[赤]炎獅子 は (5, 8) に移動した",
+    "[あなたの番] [青]ゲコゲコガ の みずしゅりけん - ターゲットを選択してください",
+    "[青]ゲコゲコガ は (6, 3) に移動した（代替アクション）",
+    "[あなたの番] [青]雷鳥 の ボルトチェンジ - ターゲットを選択してください",
+    "[青]雷鳥 は (3, 11) に移動した（代替アクション）",
+    "青チームが 5pt 獲得！(6, 7)",
+    "青チームが 石 を獲得！(12, 7)",
+    "青チームが 石 を獲得！(11, 7)",
+    "スコア - 青: 15pt, 赤: 0pt",
+    "ポイントトークン(5pt)が (12, 11) に出現！",
+    "ポイントトークン(5pt)が (5, 5) に出現！",
+    "ポイントトークン(1pt)が (5, 9) に出現！",
+    "💫 ポイント予告: (5, 6) に 5pt が次ターン出現予定",
+    "💫 ポイント予告: (6, 6) に 1pt が次ターン出現予定",
+    "💫 ポイント予告: (7, 5) に 5pt が次ターン出現予定",
+    "--- ターン終了 ---",
+    "Antigravityの行動を待機しています..."
+  ],
+  "gamePhase": "planning",
+  "deployTurn": "0",
+  "winner": null,
+  "pendingActions": [],
+  "currentResolvingAction": null,
+  "awaitingTargetSelection": false,
+  "damageEvents": [
+    {
+      "id": "dmg-1771887933721-nevov5t",
+      "targetId": "0-gekogekoga-0",
+      "amount": 40,
+      "element": "normal",
+      "timestamp": 1771887933721
+    }
+  ],
+  "pointEvents": [
+    {
+      "id": "point-1771887985050-qx5olbkxn",
+      "x": 6,
+      "y": 7,
+      "amount": 5,
+      "team": "0",
+      "timestamp": 1771887985050
+    }
+  ],
+  "cpuActionDelay": 0,
+  "homeSquares": {
+    "0": [
+      {
+        "x": 4,
+        "y": 3
+      },
+      {
+        "x": 12,
+        "y": 7
+      },
+      {
+        "x": 6,
+        "y": 12
+      }
+    ],
+    "1": [
+      {
+        "x": 4,
+        "y": 7
+      },
+      {
+        "x": 6,
+        "y": 4
+      },
+      {
+        "x": 6,
+        "y": 8
+      }
+    ]
+  },
+  "blocks": [
+    {
+      "x": 1,
+      "y": 3,
+      "hp": 1,
+      "maxHp": 1
+    },
+    {
+      "x": 1,
+      "y": 8,
+      "hp": 1,
+      "maxHp": 1
+    },
+    {
+      "x": 0,
+      "y": 10,
+      "hp": 1,
+      "maxHp": 1
+    },
+    {
+      "x": 11,
+      "y": 3,
+      "hp": 1,
+      "maxHp": 1
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "hp": 1,
+      "maxHp": 1
+    },
+    {
+      "x": 8,
+      "y": 0,
+      "hp": 1,
+      "maxHp": 1
+    },
+    {
+      "x": 0,
+      "y": 5,
+      "hp": 2,
+      "maxHp": 2
+    },
+    {
+      "x": 2,
+      "y": 11,
+      "hp": 2,
+      "maxHp": 2
+    },
+    {
+      "x": 9,
+      "y": 12,
+      "hp": 2,
+      "maxHp": 2
+    },
+    {
+      "x": 0,
+      "y": 12,
+      "hp": 2,
+      "maxHp": 2
+    }
+  ],
+  "resourceNodes": [
+    {
+      "x": 1,
+      "y": 0,
+      "type": "wood",
+      "triggerNumber": 1
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "type": "wood",
+      "triggerNumber": 3
+    },
+    {
+      "x": 3,
+      "y": 11,
+      "type": "wood",
+      "triggerNumber": 3
+    },
+    {
+      "x": 8,
+      "y": 4,
+      "type": "wood",
+      "triggerNumber": 2
+    },
+    {
+      "x": 9,
+      "y": 6,
+      "type": "wood",
+      "triggerNumber": 1
+    },
+    {
+      "x": 2,
+      "y": 9,
+      "type": "wood",
+      "triggerNumber": 3
+    },
+    {
+      "x": 8,
+      "y": 2,
+      "type": "wood",
+      "triggerNumber": 3
+    },
+    {
+      "x": 11,
+      "y": 4,
+      "type": "wood",
+      "triggerNumber": 3
+    },
+    {
+      "x": 12,
+      "y": 6,
+      "type": "wood",
+      "triggerNumber": 3
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "type": "stone",
+      "triggerNumber": 3
+    },
+    {
+      "x": 10,
+      "y": 5,
+      "type": "stone",
+      "triggerNumber": 1
+    },
+    {
+      "x": 12,
+      "y": 8,
+      "type": "stone",
+      "triggerNumber": 2
+    },
+    {
+      "x": 12,
+      "y": 7,
+      "type": "stone",
+      "triggerNumber": 2
+    },
+    {
+      "x": 7,
+      "y": 0,
+      "type": "stone",
+      "triggerNumber": 3
+    },
+    {
+      "x": 6,
+      "y": 12,
+      "type": "stone",
+      "triggerNumber": 1
+    },
+    {
+      "x": 11,
+      "y": 7,
+      "type": "stone",
+      "triggerNumber": 2
+    },
+    {
+      "x": 12,
+      "y": 1,
+      "type": "stone",
+      "triggerNumber": 1
+    },
+    {
+      "x": 7,
+      "y": 9,
+      "type": "stone",
+      "triggerNumber": 2
+    }
+  ],
+  "resourceRollResult": 2,
+  "aiMode": "antigravity",
+  "antigravityState": "waiting_for_move"
+}

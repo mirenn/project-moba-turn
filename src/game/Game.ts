@@ -237,6 +237,19 @@ export function processResourceNodes(G: GameState, random: any): void {
       const owner = G.territory[node.y][node.x];
       if (owner !== null) {
         G.players[owner].resources[node.type] += 1;
+        
+        // アニメーション用のイベントを追加
+        if (!G.resourceEvents) G.resourceEvents = [];
+        G.resourceEvents.push({
+          id: `res-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          x: node.x,
+          y: node.y,
+          amount: 1,
+          type: node.type,
+          team: owner,
+          timestamp: Date.now()
+        });
+
         const resourceNameStr = node.type === 'wood' ? '木材' : node.type === 'stone' ? '石' : '鉄';
         G.turnLog.push(`${owner === '0' ? '青' : '赤'}チームが ${resourceNameStr} を獲得！(${node.x}, ${node.y})`);
       }
@@ -536,7 +549,8 @@ const commonMoves = {
       { G, playerID }: { G: GameState; playerID: string },
       championId: string,
       cardId: string,
-      isAlternativeMove?: boolean
+      isAlternativeMove?: boolean,
+      isAlternativePurchase?: boolean
     ) => {
       if (G.gamePhase !== 'planning') return;
       
@@ -555,8 +569,25 @@ const commonMoves = {
       const alreadyActing = currentActions.some(a => a.championId === championId);
       if (alreadyActing) return;
 
-      // 資源コストチェック
-      if (!isAlternativeMove && card.resourceCost) {
+      // 代替購入の資源チェック
+      if (isAlternativePurchase) {
+        // 先に計画された代替購入があるか確認（同じターンで複数回購入する場合の複数チェック）
+        let plannedWoodCost = 0;
+        let plannedStoneCost = 0;
+        for (const a of currentActions) {
+          if ('isAlternativePurchase' in a && a.isAlternativePurchase) {
+            plannedWoodCost += 1;
+            plannedStoneCost += 1;
+          }
+        }
+        
+        if (playerState.resources.wood < 1 + plannedWoodCost || playerState.resources.stone < 1 + plannedStoneCost) {
+          G.turnLog.push(`❌ 代替購入には木材1と石材1が必要です！`);
+          return;
+        }
+      } 
+      // 通常の資源コストチェック
+      else if (!isAlternativeMove && card.resourceCost) {
         // 古いセーブデータ対策
         const usedSkills = champion.usedSkillIds || [];
         const isFirstTime = !usedSkills.includes(card.id);
@@ -598,6 +629,7 @@ const commonMoves = {
         championId,
         cardId,
         isAlternativeMove: isAlternativeMove || false,
+        isAlternativePurchase: isAlternativePurchase || false,
       };
       
       G.turnActions[team].actions.push(action);
@@ -1094,7 +1126,8 @@ export const LoLBoardGame = {
       resourceNodes,           // ★ 生成した資源ノードを初期化
       resourceRollResult: null, // ★
       aiMode: 'cpu',
-      antigravityState: 'idle'
+      antigravityState: 'idle',
+      merchant: null
     };
   },
 
@@ -1337,6 +1370,37 @@ function resolveCardAction(
   
   const enemyTeam = team === '0' ? '1' : '0';
   
+  // 代替購入: 商人との取引
+  if (action.isAlternativePurchase) {
+    if (G.merchant) {
+      const dist = Math.abs(G.merchant.x - champion.pos.x) + Math.abs(G.merchant.y - champion.pos.y);
+      if (dist <= 1) {
+        if (G.players[team].resources.wood >= 1 && G.players[team].resources.stone >= 1) {
+          G.players[team].resources.wood -= 1;
+          G.players[team].resources.stone -= 1;
+          G.scores[team] += 10;
+          
+          G.pointEvents.push({
+            id: `pt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            x: G.merchant.x,
+            y: G.merchant.y,
+            amount: 10,
+            team: team,
+            timestamp: Date.now(),
+          });
+          
+          G.turnLog.push(`💰 ${championName} は商人と取引した！ (木材-1, 石材-1, スコア+10pt)`);
+        } else {
+          G.turnLog.push(`❌ ${championName} は商人と取引しようとしたが、資源が足りなかった...`);
+        }
+      } else {
+        G.turnLog.push(`❌ ${championName} は商人と取引しようとしたが、遠すぎた...`);
+      }
+    }
+    card.currentCooldown = card.cooldown;
+    return;
+  }
+
   // 代替アクション: 2マス移動（マンハッタン距離2以内）
   if (action.isAlternativeMove) {
     if (action.targetPos) {
@@ -1920,6 +1984,37 @@ function needsDeployPhase(G: GameState): boolean {
 }
 
 /**
+ * ランダムイベントの発生（フェイズ開始時）
+ */
+function triggerRandomEvent(G: GameState, random: any) {
+  // イベント1: 商人の出現 (北側にスポーン)
+  let spawned = false;
+  let attempts = 0;
+  
+  while (!spawned && attempts < 50) {
+    const x = 2 + Math.floor(random.Number() * 9); // x: 2〜10
+    const y = 0 + Math.floor(random.Number() * 4); // y: 0〜3 (北側)
+    
+    // ブロック、中央エリア、既存の商人と被らないようにする
+    if (!isAdminDomain(x, y) && 
+        !G.blocks.some(b => b.x === x && b.y === y) && 
+        !(G.merchant && G.merchant.x === x && G.merchant.y === y)) {
+      
+      G.merchant = {
+        id: `merchant-${G.currentPhase}`,
+        x,
+        y
+      };
+      
+      G.turnLog.push(`🌟 イベント発生！ 北の座標(${x}, ${y})に商人が出現した！`);
+      spawned = true;
+      break;
+    }
+    attempts++;
+  }
+}
+
+/**
  * 解決フェーズ終了
  */
 function finishResolutionPhase(G: GameState, random: any) {
@@ -1966,6 +2061,9 @@ function finishResolutionPhase(G: GameState, random: any) {
     G.currentPhase++;
     isNewPhase = true;
     G.turnLog.push(`=== フェイズ${G.currentPhase}開始 ===`);
+    
+    // イベント発生
+    triggerRandomEvent(G, random);
   }
   
   // 状態リセット

@@ -53,6 +53,13 @@ export interface Block {
   maxHp: number;   // 最大HP
 }
 
+// 商人
+export interface Merchant {
+  id: string;
+  x: number;
+  y: number;
+}
+
 // カード定義
 export interface Card {
   id: string;
@@ -116,6 +123,7 @@ export interface CardAction {
   targetChampionId?: string; // 攻撃対象のチャンピオンID
   attackTargetPos?: Position; // 指定された攻撃対象の位置（ブロックなど、ユニット以外のターゲット用）
   isAlternativeMove?: boolean; // 代替アクション（2マス移動のみ）として使用
+  isAlternativePurchase?: boolean; // 代替購入（商人との交換）として使用
   attackDirection?: Position;  // 方向指定攻撃の方向ベクトル（例: {x:1, y:0}=右）
 }
 
@@ -171,6 +179,17 @@ export interface PendingPointToken {
   value: number;        // 1 = 通常, 5 = 高価値（赤ポイント）
 }
 
+// 資源獲得イベント（アニメーション用）
+export interface ResourceEvent {
+  id: string;
+  x: number;
+  y: number;
+  amount: number;
+  type: ResourceType;
+  team: Team;
+  timestamp: number;
+}
+
 // ポイント獲得イベント（アニメーション用）
 export interface PointEvent {
   id: string;
@@ -217,10 +236,14 @@ export interface GameState {
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー
   pointEvents: PointEvent[];    // ポイント獲得イベントのキュー
+  resourceEvents: ResourceEvent[]; // 資源獲得イベントのキュー
   cpuActionDelay: number;       // CPUアクション実行中のディレイトークン（0=無効、>0=ディレイ中）
   
   // ホームマス（最初のチャンピオン配置マス、永続的に保護される）
   homeSquares: Record<Team, Position[]>;
+  
+  // 商人（ランダムイベント）
+  merchant: Merchant | null;
   
   // 障害物ブロック
   blocks: Block[];
