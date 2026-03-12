@@ -382,6 +382,15 @@ export function isValidDeployPosition(G: GameState, pos: Position): boolean {
   // 2. 中央2x2 (Admin Domain) は配置不可
   if (isAdminDomain(pos.x, pos.y)) return false;
   
+  // 3. 他の配置済みチャンピオンから最低2マス（マンハッタン距離2）離す
+  const allChampions = [...G.players['0'].champions, ...G.players['1'].champions];
+  for (const champion of allChampions) {
+    if (champion.pos !== null) {
+      const distance = Math.abs(pos.x - champion.pos.x) + Math.abs(pos.y - champion.pos.y);
+      if (distance < 2) return false;
+    }
+  }
+  
   return true;
 }
 
@@ -479,9 +488,26 @@ const commonMoves = {
         const cpuChampionToDeploy = cpuChampions.find(c => c.pos === null);
         
         if (cpuChampionToDeploy && cpuDeployedCount < CHAMPIONS_ON_FIELD) {
-          const basePos = BASE_POSITIONS[cpuTeam][cpuDeployedCount];
-          cpuChampionToDeploy.pos = { ...basePos };
-          paintTile(G, basePos.x, basePos.y, cpuTeam);
+          // CPUの配置位置をランダムに決定（上半分 y < 6）
+          let validPos: Position | null = null;
+          let attempts = 0;
+          while (!validPos && attempts < 100) {
+            const rx = Math.floor(random.Number() * BOARD_SIZE);
+            const ry = Math.floor(random.Number() * 6);
+            const testPos = { x: rx, y: ry };
+            if (isValidDeployPosition(G, testPos)) {
+              validPos = testPos;
+            }
+            attempts++;
+          }
+          
+          // 見つからなかった場合のフォールバック
+          if (!validPos) {
+            validPos = BASE_POSITIONS[cpuTeam][cpuDeployedCount];
+          }
+
+          cpuChampionToDeploy.pos = { ...validPos };
+          paintTile(G, validPos.x, validPos.y, cpuTeam);
           G.turnLog.push(`赤チーム(CPU)が自動で ${getChampionDisplayName(cpuChampionToDeploy)} を配置しました`);
           
           // 再度手番を交代
