@@ -508,6 +508,30 @@ const commonMoves = {
         }
       }
     },
+
+    // 配置フェーズ: チャンピオンの配置を取り消す
+    undeployChampion: (
+      { G, playerID }: { G: GameState; playerID: string },
+      championId: string
+    ) => {
+      if (G.gamePhase !== 'deploy') return;
+      const team = playerID as Team;
+
+      // 手番のチェック
+      if (team !== G.currentDeployTeam) return;
+
+      const playerState = G.players[team];
+      const champion = playerState.champions.find(c => c.id === championId);
+      if (!champion || champion.pos === null) return; // 未配置ならスキップ
+
+      // 配置位置の塗りを取り消す
+      const pos = champion.pos;
+      G.territory[pos.y][pos.x] = null;
+
+      champion.pos = null;
+      G.turnLog.push(`${team === '0' ? '青' : '赤'}チームが ${getChampionDisplayName(champion)} の配置を取り消しました`);
+    },
+
     // Antigravity AIモードの切り替え
     toggleAIMode: ({ G }: { G: GameState }) => {
       if (G.gamePhase !== 'planning') return;
@@ -1119,7 +1143,10 @@ export const LoLBoardGame = {
     activePlayers: ActivePlayers.ALL,
     onBegin: ({ G }: { G: GameState }) => {
       G.turnActions = { '0': { actions: [] }, '1': { actions: [] } };
-      G.gamePhase = 'planning';
+      // 配置フェーズ中はplanningへ上書きしない
+      if (G.gamePhase !== 'deploy') {
+        G.gamePhase = 'planning';
+      }
       G.pendingActions = [];
       G.currentResolvingAction = null;
       G.awaitingTargetSelection = false;
