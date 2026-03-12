@@ -1140,6 +1140,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         })
                       })()}
 
+                      {/* ガード機能は一時的にオフ
                       {selectedChampion.cards.filter(c => c.currentCooldown === 0).length >= 2 && (
                         <button
                           className="p-2 rounded border border-yellow-600 bg-yellow-900/30 hover:bg-yellow-900/50 text-yellow-400 text-sm flex items-center justify-center gap-1"
@@ -1149,6 +1150,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                           ガード
                         </button>
                       )}
+                      */}
                     </>
                   )}
                 </>

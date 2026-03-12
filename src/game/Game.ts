@@ -335,10 +335,8 @@ function createChampionInstance(
   const definition = getChampionById(definitionId);
   if (!definition) return null;
   
-  // ゲーム中は3つのスキル + 1つの交代カードにする
-  const nonSwapCards = definition.cards.filter(c => !c.isSwap).slice(0, 3);
-  const swapCard = definition.cards.find(c => c.isSwap);
-  const selectedCards = swapCard ? [...nonSwapCards, swapCard] : nonSwapCards;
+  // 一旦交代はオフとし、3つのスキルのみにする
+  const selectedCards = definition.cards.filter(c => !c.isSwap).slice(0, 3);
 
   return {
     id: `${team}-${definitionId}-${instanceIndex}`,
