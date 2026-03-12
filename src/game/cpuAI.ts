@@ -20,7 +20,7 @@ import { calculateDamage, getTypeEffectiveness, TYPE_EFFECTIVENESS } from './typ
 // ============================================
 // 定数
 // ============================================
-const BOARD_SIZE = 13;
+const BOARD_SIZE = 12;
 
 // ============================================
 // 重み設定（難易度調整可能）
@@ -64,21 +64,21 @@ function getDistance(p1: Position, p2: Position): number {
 function getVictoryTargets(team: Team): Position[] {
   // 敵陣の奥を目指す（スコア稼ぎのため）
   if (team === '0') {
-    // 青チーム: 右端 (x=12) を目指す
+    // 青チーム: 上端 (y=0) を目指す
     return [
-      { x: 12, y: 3 }, { x: 12, y: 6 }, { x: 12, y: 9 }
+      { x: 3, y: 0 }, { x: 6, y: 0 }, { x: 9, y: 0 }
     ];
   } else {
-    // 赤チーム: 左端 (x=0) を目指す
+    // 赤チーム: 下端 (y=11) を目指す
     return [
-      { x: 0, y: 3 }, { x: 0, y: 6 }, { x: 0, y: 9 }
+      { x: 3, y: 11 }, { x: 6, y: 11 }, { x: 9, y: 11 }
     ];
   }
 }
 
-// Admin Domain: 中央3x3 (5,5) ~ (7,7)
+// Admin Domain: 中央2x2 (5,5) ~ (6,6)
 function isAdminDomain(x: number, y: number): boolean {
-  return x >= 5 && x <= 7 && y >= 5 && y <= 7;
+  return x >= 5 && x <= 6 && y >= 5 && y <= 6;
 }
 
 
@@ -257,9 +257,9 @@ function evaluatePositioning(
     }
   }
   
-  // 敵陣に近づく動きを評価（左右配置）
-  // 13x13 なのでターゲットも修正
-  const enemyBase = team === '0' ? { x: 12, y: 6 } : { x: 0, y: 6 };
+  // 敵陣に近づく動きを評価（上下配置）
+  // 12x12 なのでターゲットも修正
+  const enemyBase = team === '0' ? { x: 5, y: 0 } : { x: 5, y: 11 };
   const currentDist = champion.pos ? getDistance(champion.pos, enemyBase) : 20;
   const newDist = getDistance(action.targetPos, enemyBase);
   

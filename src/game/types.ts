@@ -206,14 +206,14 @@ export interface GameState {
   turnInPhase: number;     // フェイズ内のターン数（1-4）
   turnActions: Record<Team, TurnAction>;
   turnLog: string[];
-  gamePhase: 'planning' | 'resolution'; // ゲームフェーズ（deploy, upgradeは廃止）
+  gamePhase: 'deploy' | 'planning' | 'resolution'; // ゲームフェーズ（deploy=初期配置, planning=計画, resolution=解決）
   winner: Team | null;
   aiMode: 'cpu' | 'antigravity'; // AIの動作モード
   antigravityState: 'idle' | 'waiting_for_move' | 'waiting_for_action_target'; // Antigravityの外部入力待ち状態
 
   
   // 陣取り用
-  territory: TerritoryOwner[][]; // 13x13の陣地マップ
+  territory: TerritoryOwner[][]; // 12x12の陣地マップ
   scores: Record<Team, number>;   // 各チームのスコア（累積獲得ポイント）
   longestPaintBonusHolder: Team | null; // ロンゲストペイントボーナスの保持者
   
@@ -230,8 +230,9 @@ export interface GameState {
   resourceNodes: ResourceNode[]; // 盤面に配置された資源ノード
   resourceRollResult: number | null; // ターン終了時のサイコロ(1-6)の出目。UI表示用
   
-  // リスポーンシステム用（配置フェーズは廃止）
-  // deployTurn は廃止
+  // 初期配置フェーズ用
+  deployTurn: number; // 配置フェーズのターン数（0=配置中, 1=配置完了）
+  currentDeployTeam: Team; // 現在配置を行っているチーム
   
   // アニメーション用
   damageEvents: DamageEvent[];  // ダメージイベントのキュー

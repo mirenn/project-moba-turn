@@ -10,7 +10,7 @@ import { AttackEffect } from './effects/AttackEffect';
 
 type Props = BoardProps<GameState>;
 
-const BOARD_SIZE = 13;
+const BOARD_SIZE = 12;
 
 const TYPE_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgColor: string }> = {
   water: { icon: <Droplets size={12} />, color: 'text-blue-400', bgColor: 'bg-blue-600' },
@@ -44,6 +44,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const [visiblePointEvents, setVisiblePointEvents] = useState<PointEvent[]>([]);
   const [visibleResourceEvents, setVisibleResourceEvents] = useState<ResourceEvent[]>([]);
   const [hoveredMovePos, setHoveredMovePos] = useState<Position | null>(null); // 経路プレビュー用
+  const [selectedDeployChampionId, setSelectedDeployChampionId] = useState<string | null>(null); // 配置フェーズ用
   const processedEventIdsRef = useRef<Set<string>>(new Set());
   const processedPointEventIdsRef = useRef<Set<string>>(new Set());
   const processedResourceEventIdsRef = useRef<Set<string>>(new Set());
@@ -373,6 +374,15 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
       return;
     }
 
+    // 配置フェーズ: マスをクリックしてチャンピオンを配置
+    if (G.gamePhase === 'deploy') {
+      if (selectedDeployChampionId) {
+        moves.deployChampion(selectedDeployChampionId, { x, y });
+        setSelectedDeployChampionId(null);
+      }
+      return;
+    }
+
     // 計画フェーズ: チャンピオン選択
     if (G.gamePhase === 'planning') {
       const { champion } = getCellContent(x, y);
@@ -456,8 +466,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           <div className="text-slate-400">
             フェイズ {G.currentPhase} / ターン {G.turnInPhase}
           </div>
-          <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'planning' ? 'bg-blue-600' : 'bg-orange-600'}`}>
-            {G.gamePhase === 'planning' ? '計画フェーズ' : '解決フェーズ'}
+          <div className={`px-2 py-1 rounded text-xs font-bold ${G.gamePhase === 'deploy' ? 'bg-green-600' : G.gamePhase === 'planning' ? 'bg-blue-600' : 'bg-orange-600'}`}>
+            {G.gamePhase === 'deploy' ? '配置フェーズ' : G.gamePhase === 'planning' ? '計画フェーズ' : '解決フェーズ'}
           </div>
         </div>
         <div className="flex gap-3 font-bold items-center">
@@ -536,6 +546,72 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </div>
         </div>
       )}
+      {/* 配置フェーズUI */}
+      {G.gamePhase === 'deploy' && (() => {
+        const undeployedChampions = myPlayerState.champions.filter(c => c.pos === null).slice(0, 3 - myPlayerState.champions.filter(c => c.pos !== null).length + myPlayerState.champions.filter(c => c.pos === null).length).filter((_, i) => {
+          // ベンチ(4体目)は配置不可なので最初の3体のみ表示
+          return true;
+        });
+        const deployableChampions = myPlayerState.champions.filter((c, idx) => idx < 3); // 最初の3体が配置対象
+        const deployedCount = myPlayerState.champions.filter(c => c.pos !== null).length;
+        const isMyTurn = G.currentDeployTeam === myPlayerID;
+
+        return (
+          <div className={`p-4 max-w-lg text-center rounded-lg border ${isMyTurn ? 'bg-green-900/50 border-green-500' : 'bg-slate-800 border-slate-600'}`}>
+            <div className={`font-bold mb-3 text-lg ${isMyTurn ? 'text-green-300' : 'text-slate-400'}`}>
+              🏁 配置フェーズ {isMyTurn ? '- 🎯 あなたの番です' : '- ⏳ 相手の配置を待機中...'}
+            </div>
+            <div className={`text-sm mb-3 ${isMyTurn ? 'text-slate-300' : 'text-slate-500'}`}>
+              {isMyTurn 
+                ? `チャンピオンを選んでボード上をクリックして配置してください（${deployedCount}/3体配置済み）` 
+                : '相手がチャンピオンを配置するのを待っています...'}
+            </div>
+            <div className={`flex gap-2 justify-center mb-3 flex-wrap ${!isMyTurn && 'opacity-50 pointer-events-none'}`}>
+              {deployableChampions.map(champion => {
+                const def = getChampionDef(champion);
+                const isDeployed = champion.pos !== null;
+                const isSelected = selectedDeployChampionId === champion.id;
+
+                return (
+                  <div
+                    key={champion.id}
+                    className={`p-2 rounded border cursor-pointer transition-all min-w-[100px] ${
+                      isDeployed 
+                        ? 'border-green-400 bg-green-900/70' 
+                        : isSelected
+                          ? 'border-yellow-400 bg-yellow-900/50 ring-2 ring-yellow-400 scale-105'
+                          : 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-slate-400'
+                    }`}
+                    onClick={() => {
+                      if (isDeployed) {
+                        moves.undeployChampion(champion.id);
+                      } else {
+                        setSelectedDeployChampionId(isSelected ? null : champion.id);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-1 justify-center">
+                      <div className="w-6 h-6">
+                        <ChampionIcon championId={champion.definitionId} isEnemy={false} />
+                      </div>
+                      <span className="text-xs font-bold">{def?.nameJa}</span>
+                    </div>
+                    <div className="text-[10px] mt-1">
+                      {isDeployed ? (
+                        <span className="text-green-400">✓ ({champion.pos!.x}, {champion.pos!.y}) <span className="text-red-400 hover:text-red-300">×取消</span></span>
+                      ) : isSelected ? (
+                        <span className="text-yellow-300">マスをクリック</span>
+                      ) : (
+                        <span className="text-slate-400">クリックで選択</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 解決フェーズ: ターゲット選択UI */}
       {isResolutionPhase && isAwaitingTarget && resolvingChampion && (resolvingCard || isAlternativeMove) && (
@@ -738,6 +814,13 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
 
               let bgClass = 'bg-slate-700 hover:bg-slate-600';
+              
+              // 配置フェーズ: 配置可能マスをハイライト
+              const isDeployTarget = G.gamePhase === 'deploy' && selectedDeployChampionId && !champion &&
+                !(x >= 5 && x <= 7 && y >= 5 && y <= 7) && // Admin Domain除外
+                !G.blocks.some(b => b.x === x && b.y === y); // ブロック除外
+              if (isDeployTarget) bgClass = 'bg-green-700/30 ring-1 ring-green-500/50 cursor-pointer hover:bg-green-600/50';
+              
               if (isSelected) bgClass = 'bg-yellow-900 ring-2 ring-yellow-400';
               if (isSelectedEnemy) bgClass = 'bg-red-900 ring-2 ring-red-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
