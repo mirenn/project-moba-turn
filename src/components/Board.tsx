@@ -562,8 +562,8 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               🏁 配置フェーズ {isMyTurn ? '- 🎯 あなたの番です' : '- ⏳ 相手の配置を待機中...'}
             </div>
             <div className={`text-sm mb-3 ${isMyTurn ? 'text-slate-300' : 'text-slate-500'}`}>
-              {isMyTurn 
-                ? `チャンピオンを選んでボード上をクリックして配置してください（${deployedCount}/3体配置済み）` 
+              {isMyTurn
+                ? `チャンピオンを選んでボード上をクリックして配置してください（${deployedCount}/3体配置済み）`
                 : '相手がチャンピオンを配置するのを待っています...'}
             </div>
             <div className={`flex gap-2 justify-center mb-3 flex-wrap ${!isMyTurn && 'opacity-50 pointer-events-none'}`}>
@@ -575,13 +575,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                 return (
                   <div
                     key={champion.id}
-                    className={`p-2 rounded border cursor-pointer transition-all min-w-[100px] ${
-                      isDeployed 
-                        ? 'border-green-400 bg-green-900/70' 
+                    className={`p-2 rounded border cursor-pointer transition-all min-w-[100px] ${isDeployed
+                        ? 'border-green-400 bg-green-900/70'
                         : isSelected
                           ? 'border-yellow-400 bg-yellow-900/50 ring-2 ring-yellow-400 scale-105'
                           : 'border-slate-600 bg-slate-800 hover:bg-slate-700 hover:border-slate-400'
-                    }`}
+                      }`}
                     onClick={() => {
                       if (isDeployed) {
                         moves.undeployChampion(champion.id);
@@ -814,13 +813,13 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
 
 
               let bgClass = 'bg-slate-700 hover:bg-slate-600';
-              
+
               // 配置フェーズ: 配置可能マスをハイライト
               const isDeployTarget = G.gamePhase === 'deploy' && selectedDeployChampionId && !champion &&
                 !(x >= 5 && x <= 7 && y >= 5 && y <= 7) && // Admin Domain除外
                 !G.blocks.some(b => b.x === x && b.y === y); // ブロック除外
               if (isDeployTarget) bgClass = 'bg-green-700/30 ring-1 ring-green-500/50 cursor-pointer hover:bg-green-600/50';
-              
+
               if (isSelected) bgClass = 'bg-yellow-900 ring-2 ring-yellow-400';
               if (isSelectedEnemy) bgClass = 'bg-red-900 ring-2 ring-red-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
@@ -888,6 +887,20 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                           {isActing && champion.team === myPlayerID && G.gamePhase === 'planning' && (
                             <div className="absolute -bottom-1 -left-1 bg-green-500 rounded-full p-0.5 drop-shadow-[0_0_2px_rgba(0,0,0,0.8)]">
                               <Check size={8} className="text-white" />
+                            </div>
+                          )}
+                          {(!isActing) && G.gamePhase === 'planning' && champion.defaultMoveDir && (
+                            <div
+                              className={`absolute text-white font-bold text-lg drop-shadow-[0_0_3px_rgba(0,0,0,1)] z-30 ${champion.defaultMoveDir.y === -1 ? '-top-4 left-1/2 -translate-x-1/2' :
+                                  champion.defaultMoveDir.y === 1 ? '-bottom-4 left-1/2 -translate-x-1/2' :
+                                    champion.defaultMoveDir.x === -1 ? 'top-1/2 -left-4 -translate-y-1/2' :
+                                      'top-1/2 -right-4 -translate-y-1/2'
+                                }`}
+                              title="ランダム移動予定方向"
+                            >
+                              {champion.defaultMoveDir.y === -1 ? '↑' :
+                                champion.defaultMoveDir.y === 1 ? '↓' :
+                                  champion.defaultMoveDir.x === -1 ? '←' : '→'}
                             </div>
                           )}
                         </div>
