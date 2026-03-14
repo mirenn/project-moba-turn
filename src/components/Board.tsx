@@ -45,6 +45,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
   const [visibleResourceEvents, setVisibleResourceEvents] = useState<ResourceEvent[]>([]);
   const [hoveredMovePos, setHoveredMovePos] = useState<Position | null>(null); // 経路プレビュー用
   const [selectedDeployChampionId, setSelectedDeployChampionId] = useState<string | null>(null); // 配置フェーズ用
+  const [planningTargetedCard, setPlanningTargetedCard] = useState<{ championId: string, cardId: string } | null>(null); // プラン時の必中攻撃のターゲット選択用
   const processedEventIdsRef = useRef<Set<string>>(new Set());
   const processedPointEventIdsRef = useRef<Set<string>>(new Set());
   const processedResourceEventIdsRef = useRef<Set<string>>(new Set());
@@ -386,6 +387,23 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     // 計画フェーズ: チャンピオン選択
     if (G.gamePhase === 'planning') {
       const { champion } = getCellContent(x, y);
+
+      if (planningTargetedCard) {
+        if (champion && champion.team === enemyTeam) {
+          const sourceChampion = myPlayerState.champions.find(c => c.id === planningTargetedCard.championId);
+          const card = sourceChampion?.cards.find(c => c.id === planningTargetedCard.cardId);
+          if (sourceChampion && sourceChampion.pos && card && champion.pos) {
+            const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
+            if (getDistance(sourceChampion.pos, champion.pos) <= attackRange) {
+              moves.selectCard(planningTargetedCard.championId, planningTargetedCard.cardId, false, false, champion.id);
+              setSelectedChampionId(null);
+            }
+          }
+        }
+        setPlanningTargetedCard(null);
+        return;
+      }
+
       if (champion) {
         if (champion.team === myPlayerID) {
           // 自チームのチャンピオンを選択
@@ -412,6 +430,11 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
     if (G.gamePhase !== 'planning') return;
     if (!selectedChampion) return;
     if (actingChampionIds.includes(selectedChampion.id)) return;
+
+    if (card.isTargeted && !isAlternative && !isAlternativePurchase) {
+      setPlanningTargetedCard({ championId: selectedChampion.id, cardId: card.id });
+      return;
+    }
 
     moves.selectCard(selectedChampion.id, card.id, isAlternative, isAlternativePurchase);
     setSelectedChampionId(null);
@@ -608,6 +631,32 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                 );
               })}
             </div>
+          </div>
+        );
+      })()}
+
+      {/* 計画フェーズ: 必中攻撃のターゲット選択UI */}
+      {G.gamePhase === 'planning' && planningTargetedCard && (() => {
+        const sourceChampion = myPlayerState.champions.find(c => c.id === planningTargetedCard.championId);
+        const card = sourceChampion?.cards.find(c => c.id === planningTargetedCard.cardId);
+        return (
+          <div className="bg-red-900/50 border border-red-500 rounded-lg p-4 max-w-md text-center text-white my-2">
+            <div className="text-red-300 font-bold mb-2 flex items-center justify-center gap-2">
+              <Target size={18} />
+              必中攻撃のターゲットを選択してください
+            </div>
+            <div className="text-sm mb-2">
+              {sourceChampion && getChampionDef(sourceChampion)?.nameJa} の <span className="font-bold text-yellow-300">{card?.nameJa}</span>
+            </div>
+            <div className="text-xs text-slate-400 mb-2">
+              赤く光っている敵チャンピオンをクリックして攻撃対象を選択
+            </div>
+            <button
+              className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded"
+              onClick={() => setPlanningTargetedCard(null)}
+            >
+              キャンセル
+            </button>
           </div>
         );
       })()}
@@ -823,6 +872,21 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
               if (isSelected) bgClass = 'bg-yellow-900 ring-2 ring-yellow-400';
               if (isSelectedEnemy) bgClass = 'bg-red-900 ring-2 ring-red-400';
               if (isActing && champion?.team === myPlayerID && G.gamePhase === 'planning') bgClass = 'bg-green-900 ring-1 ring-green-400';
+
+              // 計画フェーズでの対象選択ハイライト
+              let isTargetableEnemy = false;
+              if (G.gamePhase === 'planning' && planningTargetedCard) {
+                const sourceChampion = myPlayerState.champions.find(c => c.id === planningTargetedCard.championId);
+                const card = sourceChampion?.cards.find(c => c.id === planningTargetedCard.cardId);
+                if (sourceChampion && sourceChampion.pos && card && champion && champion.team === enemyTeam && champion.pos) {
+                  const attackRange = card.attackRange ?? (card.move > 0 ? 1 : 2);
+                  if (getDistance(sourceChampion.pos, champion.pos) <= attackRange) {
+                    isTargetableEnemy = true;
+                  }
+                }
+              }
+
+              if (isTargetableEnemy) bgClass = 'bg-red-900/50 ring-2 ring-red-400 cursor-pointer animate-pulse';
 
               // 移動先候補（緑の枠）
               if (isMoveTarget) bgClass = 'bg-green-700/50 ring-2 ring-green-400 cursor-pointer';

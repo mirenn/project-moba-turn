@@ -74,6 +74,7 @@ export interface Card {
   effectFn?: string;       // 効果処理の識別子
   isSwap?: boolean;        // 交代カードかどうか
   isDirectional?: boolean; // 方向指定攻撃かどうか
+  isTargeted?: boolean;    // 対象指定攻撃（必中）かどうか
   lineRange?: number;      // 直線範囲（方向指定攻撃用）
   isSurroundingAoE?: boolean; // 周囲1マス全体攻撃かどうか
   bonusPower?: number;     // アップグレードによるパワーボーナス（累積）

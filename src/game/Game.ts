@@ -668,7 +668,8 @@ const commonMoves = {
     championId: string,
     cardId: string,
     isAlternativeMove?: boolean,
-    isAlternativePurchase?: boolean
+    isAlternativePurchase?: boolean,
+    targetChampionId?: string
   ) => {
     if (G.gamePhase !== 'planning') return;
 
@@ -748,6 +749,7 @@ const commonMoves = {
       cardId,
       isAlternativeMove: isAlternativeMove || false,
       isAlternativePurchase: isAlternativePurchase || false,
+      targetChampionId,
     };
 
     G.turnActions[team].actions.push(action);
@@ -1335,10 +1337,14 @@ function processNextAction(G: GameState, random: any) {
 
   // プレイヤーの行動: ターゲット選択待ち
   if (team === '0') {
-    G.awaitingTargetSelection = true;
     const card = champion.cards.find(c => c.id === action.cardId);
-    G.turnLog.push(`[あなたの番] ${getChampionDisplayName(champion)} の ${card?.nameJa || 'カード'} - ターゲットを選択してください`);
-    return;
+    if (card?.isTargeted && action.targetChampionId) {
+      // 計画フェーズで対象が指定済みの必中攻撃はターゲット選択をスキップ
+    } else {
+      G.awaitingTargetSelection = true;
+      G.turnLog.push(`[あなたの番] ${getChampionDisplayName(champion)} の ${card?.nameJa || 'カード'} - ターゲットを選択してください`);
+      return;
+    }
   }
 
   // CPUの行動
@@ -1352,6 +1358,7 @@ function processNextAction(G: GameState, random: any) {
     else if (card) {
       if (card.isSwap && action.targetChampionId) needsTarget = false;
       else if (card.isDirectional && action.attackDirection) needsTarget = false;
+      else if (card.isTargeted && action.targetChampionId) needsTarget = false;
       else if (card.move > 0 && action.targetPos && card.power === 0) needsTarget = false;
       else if (card.power > 0 && (action.targetChampionId || action.attackTargetPos || action.targetPos)) {
         // 攻撃技で、何らかのターゲットが指定済みなら待機不要とする
@@ -1744,7 +1751,7 @@ function resolveCardAction(
 
         const dist = getDistance(champion.pos, target.pos);
 
-        if (dist <= attackRange) {
+        if (dist <= attackRange || card.isTargeted) {
           const effectivePower3 = card.power + (card.bonusPower ?? 0);
           const { damage, effectiveness } = calculateDamage(
             effectivePower3,
