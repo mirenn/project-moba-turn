@@ -503,8 +503,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
           </button>
 
           <div className="flex gap-2 bg-slate-900 px-2 py-1 rounded border border-slate-700 ml-2">
-            <span className="text-green-400 text-xs flex items-center gap-1" title="木材">🌲 {myPlayerState.resources.wood}</span>
-            <span className="text-stone-400 text-xs flex items-center gap-1" title="石材">⛰️ {myPlayerState.resources.stone}</span>
+            <span className="text-yellow-400 text-xs flex items-center gap-1" title="ゴールド">💰 {myPlayerState.resources.gold}</span>
           </div>
           <span className="text-blue-400 ml-2">
             青: {G.scores['0']}pt
@@ -985,13 +984,12 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                         <div
                           key={`resource-${idx}`}
                           className={`absolute inset-0.5 rounded-full flex flex-col items-center justify-center z-10 opacity-70 pointer-events-none border-2 transition-all duration-300
-                            ${node.type === 'wood' ? 'bg-green-900 border-green-500 text-green-300'
-                              : 'bg-stone-800 border-stone-500 text-stone-300'}
+                            bg-yellow-900 border-yellow-500 text-yellow-300
                             ${isGettingResource ? 'animate-pulse ring-4 ring-yellow-400 scale-110 opacity-100 shadow-[0_0_15px_rgba(250,204,21,0.8)]' : ''}`}
-                          title={`${node.type} 産出 (出目: ${node.triggerNumber})`}
+                          title={`ゴールド 産出 (出目: ${node.triggerNumber})`}
                         >
                           <span className="text-[10px]">
-                            {node.type === 'wood' ? '🌲' : '⛰️'}
+                            💰
                           </span>
                           <span className="text-[12px] font-bold leading-none">{node.triggerNumber}</span>
 
@@ -1171,8 +1169,7 @@ export default function Board({ G, ctx, moves, playerID }: Props) {
                                       <span className="text-yellow-400 font-bold animate-pulse">初回無料！</span>
                                     ) : (
                                       <>
-                                        {card.resourceCost.wood ? <span className="text-green-400">🌲{card.resourceCost.wood}</span> : null}
-                                        {card.resourceCost.stone ? <span className="text-stone-400">⛰️{card.resourceCost.stone}</span> : null}
+                                        {card.resourceCost.gold ? <span className="text-yellow-400">💰{card.resourceCost.gold}</span> : null}
                                       </>
                                     )}
                                   </div>

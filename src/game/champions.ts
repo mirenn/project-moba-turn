@@ -107,7 +107,7 @@ export const GEKOGEKOGA: ChampionDefinition = {
     effect: '3マス以内の1体に大ダメージ',
     cooldown: 4,
     currentCooldown: 0,
-    resourceCost: { wood: 1, stone: 1 },
+    resourceCost: { gold: 2 },
   },
 };
 
@@ -128,7 +128,7 @@ const kidoubaCards: Card[] = [
     effectFn: 'linearMove',
     cooldown: 1,
     currentCooldown: 0,
-    resourceCost: { wood: 1 },
+    resourceCost: { gold: 1 },
   },
   {
     id: 'kidouba-fumitsuke',
@@ -171,7 +171,7 @@ const kidoubaCards: Card[] = [
     effectFn: 'recoil',
     cooldown: 5,
     currentCooldown: 0,
-    resourceCost: { stone: 2 },
+    resourceCost: { gold: 2 },
   },
   {
     id: 'kidouba-swap',
@@ -233,7 +233,7 @@ const enshishiCards: Card[] = [
     effect: '指定方向に8マスの直線攻撃',
     cooldown: 3,
     currentCooldown: 0,
-    resourceCost: { wood: 1 },
+    resourceCost: { gold: 1 },
   },
   {
     id: 'enshishi-flaredrive',
@@ -248,7 +248,7 @@ const enshishiCards: Card[] = [
     effectFn: 'recoil',
     cooldown: 4,
     currentCooldown: 0,
-    resourceCost: { wood: 2 },
+    resourceCost: { gold: 2 },
   },
   {
     id: 'enshishi-honoonokiba',
@@ -323,7 +323,7 @@ const raichouCards: Card[] = [
     effect: '2マス以内の1体にダメージ',
     cooldown: 2,
     currentCooldown: 0,
-    resourceCost: { stone: 1 },
+    resourceCost: { gold: 1 },
   },
   {
     id: 'raichou-denkousekka',
@@ -365,7 +365,7 @@ const raichouCards: Card[] = [
     effect: '3マス以内の1体に大ダメージ。必中',
     cooldown: 4,
     currentCooldown: 0,
-    resourceCost: { wood: 1, stone: 1 },
+    resourceCost: { gold: 2 },
   },
   {
     id: 'raichou-swap',

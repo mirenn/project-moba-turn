@@ -24,12 +24,11 @@ export type ElementType =
   | 'fairy';   // フェアリー
 
 // 資源のタイプ (カタン風)
-export type ResourceType = 'wood' | 'stone';
+export type ResourceType = 'gold';
 
 // 資源コスト
 export interface ResourceCost {
-  wood?: number;
-  stone?: number;
+  gold?: number;
 }
 
 // 資源ノード（盤面に配置される資源産出マス）
@@ -146,7 +145,7 @@ export interface PlayerState {
   team: Team;
   selectedChampionIds: string[]; // 選択した4体のチャンピオンdefinitionId
   champions: ChampionInstance[]; // ゲーム内のチャンピオンインスタンス
-  resources: Record<ResourceType, number>; // 所持している資材（木材、石材）
+  resources: Record<ResourceType, number>; // 所持している資材（ゴールド）
 }
 
 // 解決待ちの行動

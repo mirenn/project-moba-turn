@@ -274,7 +274,7 @@ export function processResourceNodes(G: GameState, random: any): void {
           timestamp: Date.now()
         });
 
-        const resourceNameStr = node.type === 'wood' ? '木材' : node.type === 'stone' ? '石' : '鉄';
+        const resourceNameStr = 'ゴールド';
         G.turnLog.push(`${owner === '0' ? '青' : '赤'}チームが ${resourceNameStr} を獲得！(${node.x}, ${node.y})`);
       }
     }
@@ -422,7 +422,7 @@ function initializePlayerState(team: Team, championIds: string[]): PlayerState {
     team,
     selectedChampionIds: championIds,
     champions,
-    resources: { wood: 0, stone: 0 },
+    resources: { gold: 0 },
   };
 }
 
@@ -691,17 +691,15 @@ const commonMoves = {
     // 代替購入の資源チェック
     if (isAlternativePurchase) {
       // 先に計画された代替購入があるか確認（同じターンで複数回購入する場合の複数チェック）
-      let plannedWoodCost = 0;
-      let plannedStoneCost = 0;
+      let plannedGoldCost = 0;
       for (const a of currentActions) {
         if ('isAlternativePurchase' in a && a.isAlternativePurchase) {
-          plannedWoodCost += 1;
-          plannedStoneCost += 1;
+          plannedGoldCost += 2;
         }
       }
 
-      if (playerState.resources.wood < 1 + plannedWoodCost || playerState.resources.stone < 1 + plannedStoneCost) {
-        G.turnLog.push(`❌ 代替購入には木材1と石材1が必要です！`);
+      if (playerState.resources.gold < 2 + plannedGoldCost) {
+        G.turnLog.push(`❌ 代替購入にはゴールド2が必要です！`);
         return;
       }
     }
@@ -712,7 +710,7 @@ const commonMoves = {
       const isFirstTime = !usedSkills.includes(card.id);
       if (!isFirstTime) {
         // 既に計画されているアクションのコストを計算
-        const plannedCosts = { wood: 0, stone: 0, iron: 0 };
+        const plannedCosts = { gold: 0 };
         for (const a of currentActions) {
           if ('discardCardIds' in a) continue; // ガードはコストなし
           if (a.isAlternativeMove) continue;
@@ -726,17 +724,14 @@ const commonMoves = {
           const plannedUsedSkills = plannedChampion.usedSkillIds || [];
           const plannedFirstTime = !plannedUsedSkills.includes(plannedCard.id);
           if (!plannedFirstTime) {
-            plannedCosts.wood += plannedCard.resourceCost.wood || 0;
-            plannedCosts.stone += plannedCard.resourceCost.stone || 0;
+            plannedCosts.gold += plannedCard.resourceCost.gold || 0;
           }
         }
 
-        const neededWood = (card.resourceCost.wood || 0) + plannedCosts.wood;
-        const neededStone = (card.resourceCost.stone || 0) + plannedCosts.stone;
+        const neededGold = (card.resourceCost.gold || 0) + plannedCosts.gold;
 
         if (
-          playerState.resources.wood < neededWood ||
-          playerState.resources.stone < neededStone
+          playerState.resources.gold < neededGold
         ) {
           G.turnLog.push(`❌ ${card.nameJa} を使用するための資源が足りません！`);
           return; // 資源不足
@@ -1179,7 +1174,7 @@ export const LoLBoardGame = {
 
     // 資源ノードの生成 (木材9、石材9 = 計18個)
     const resourceNodes: ResourceNode[] = [];
-    const resourceTypes: ResourceType[] = ['wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'wood', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone', 'stone'];
+    const resourceTypes: ResourceType[] = ['gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold', 'gold'];
     let placed = 0;
 
     while (placed < resourceTypes.length) {
@@ -1455,9 +1450,8 @@ function resolveCardAction(
     if (G.merchant) {
       const dist = Math.abs(G.merchant.x - champion.pos.x) + Math.abs(G.merchant.y - champion.pos.y);
       if (dist <= 1) {
-        if (G.players[team].resources.wood >= 1 && G.players[team].resources.stone >= 1) {
-          G.players[team].resources.wood -= 1;
-          G.players[team].resources.stone -= 1;
+        if (G.players[team].resources.gold >= 2) {
+          G.players[team].resources.gold -= 2;
           G.scores[team] += 10;
 
           G.pointEvents.push({
@@ -1469,7 +1463,7 @@ function resolveCardAction(
             timestamp: Date.now(),
           });
 
-          G.turnLog.push(`💰 ${championName} は商人と取引した！ (木材-1, 石材-1, スコア+10pt)`);
+          G.turnLog.push(`💰 ${championName} は商人と取引した！ (ゴールド-2, スコア+10pt)`);
         } else {
           G.turnLog.push(`❌ ${championName} は商人と取引しようとしたが、資源が足りなかった...`);
         }
@@ -1516,8 +1510,7 @@ function resolveCardAction(
     if (!champion.usedSkillIds) champion.usedSkillIds = [];
     const isFirstTime = !champion.usedSkillIds.includes(card.id);
     if (!isFirstTime) {
-      if (card.resourceCost.wood) G.players[team].resources.wood -= card.resourceCost.wood;
-      if (card.resourceCost.stone) G.players[team].resources.stone -= card.resourceCost.stone;
+      if (card.resourceCost.gold) G.players[team].resources.gold -= card.resourceCost.gold;
     } else {
       G.turnLog.push(`✨ ${championName} は初めて ${card.nameJa} を使うため、資源コスト0で発動！`);
       champion.usedSkillIds.push(card.id);
