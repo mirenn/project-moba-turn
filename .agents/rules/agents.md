@@ -15,6 +15,4 @@ A fusion of a Multiplayer Online Battle Arena (MOBA) and a Turn-Based Strategy B
 ## 🛠️ Development Guidelines
 
 - **Active Development**: Use `npm run dev` to start the development server (changes are reflected immediately).
-- **Production Testing**: Run `npm run build` && `npm start` to verify the production build.
-- **Documentation**: Whenever you introduce new rules or features, ensure `GAME_DESIGN.md` is updated accordingly.
-- **Self-Maintenance**: You are allowed (and encouraged) to update this file (`AGENTS.md`) whenever necessary.
+- **Self-Maintenance**: You are allowed (and encouraged) to update this file (`.agents/rules/agents.md`) whenever necessary.
