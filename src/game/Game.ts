@@ -881,9 +881,9 @@ const commonMoves = {
 
         let priority = 0;
         if (!('discardCardIds' in action)) {
-          // ランダム移動の場合は優先度を最低にするなど適当に調整
+          // ランダム移動の場合は優先度を最高にする
           if ((action as CardAction).isRandomMove) {
-            priority = -99; // 一番最後に実行されるように低い優先度を割当
+            priority = 999; // ターンの最初に実行されるように高い優先度を割当
           } else {
             const card = champion.cards.find(c => c.id === action.cardId);
             priority = card?.priority || 0;
